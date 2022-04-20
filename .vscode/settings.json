@@ -1,0 +1,12 @@
+{
+  "editor.rulers": [100],
+  "editor.formatOnSave": true,
+  "rust-analyzer.rustfmt.extraArgs": ["+nightly"],
+  "rust-analyzer.diagnostics.disabled": ["macro-error"],
+  "rust-analyzer.lens.enable": true,
+  "rust-analyzer.inlayHints.enable": false,
+  "rust-analyzer.inlayHints.typeHints": false,
+  "rust-analyzer.inlayHints.renderColons": false,
+  "rust-analyzer.inlayHints.parameterHints": false,
+  "rust-analyzer.inlayHints.chainingHints": false
+}

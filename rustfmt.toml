@@ -1,0 +1,22 @@
+# Enable unstable features, e.g. group_imports.
+unstable_features = true
+
+# Imports.
+imports_indent = "Block"
+imports_layout = "Mixed"
+group_imports = "StdExternalCrate"
+reorder_imports = false
+
+# Tabs & spaces.
+tab_spaces = 2
+hard_tabs = false
+
+# Commas.
+trailing_comma = "Vertical"
+match_block_trailing_comma = true
+
+# General width constraints.
+max_width = 100
+
+# Match tweaks.
+match_arm_leading_pipes = "Always" # Because I'm a weirdo.

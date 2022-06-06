@@ -16,6 +16,19 @@ impl Default for RepositoryHost {
   }
 }
 
+/// Container for a repository host.
+#[derive(Debug)]
+pub(crate) enum Host {
+  Known(RepositoryHost),
+  Unknown,
+}
+
+impl Default for Host {
+  fn default() -> Self {
+    Host::Known(RepositoryHost::default())
+  }
+}
+
 /// Repository meta, i.e. *ref*.
 ///
 /// This newtype exists solely for providing the default value.
@@ -25,7 +38,7 @@ pub(crate) struct RepositoryMeta(pub String);
 impl Default for RepositoryMeta {
   fn default() -> Self {
     // TODO: Get the default value for meta from somewhere else, e.g. from env variables or config.
-    RepositoryMeta(format!("master"))
+    RepositoryMeta("master".to_string())
   }
 }
 

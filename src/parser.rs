@@ -2,13 +2,9 @@ use chumsky::error::Cheap;
 use chumsky::prelude::*;
 
 use crate::app::AppError;
-use crate::repository::{Repository, RepositoryHost, RepositoryMeta};
+use crate::repository::{Host, Repository, RepositoryHost, RepositoryMeta};
 
-type ParseResult = (
-  Option<Option<RepositoryHost>>,
-  (String, String),
-  Option<RepositoryMeta>,
-);
+type ParseResult = (Option<Host>, (String, String), Option<RepositoryMeta>);
 
 /// Parses source argument of the following form:
 ///
@@ -16,11 +12,9 @@ type ParseResult = (
 pub(crate) fn shortcut(input: &str) -> Result<Repository, AppError> {
   let host = host().or_not();
   let meta = meta().or_not().then_ignore(end());
+  let repo = repository().then(meta);
 
-  let shortcut = host
-    .then(repository().then(meta))
-    .map(|(a, (b, c))| (a, b, c))
-    .parse(input);
+  let shortcut = host.then(repo).map(|(a, (b, c))| (a, b, c)).parse(input);
 
   match shortcut {
     | Ok(data) => produce_result(data),
@@ -32,16 +26,16 @@ pub(crate) fn shortcut(input: &str) -> Result<Repository, AppError> {
 /// - `github` or `gh`
 /// - `gitlab` or `gl`
 /// - `bitbucket` or `bb`
-fn host() -> impl Parser<char, Option<RepositoryHost>, Error = Cheap<char>> {
+fn host() -> impl Parser<char, Host, Error = Cheap<char>> {
   let host = filter::<_, _, Cheap<char>>(|ch: &char| ch.is_ascii_alphabetic())
     .repeated()
     .at_least(1)
     .collect::<String>()
     .map(|variant| match variant.as_str() {
-      | "github" | "gh" => Some(RepositoryHost::GitHub),
-      | "gitlab" | "gl" => Some(RepositoryHost::GitLab),
-      | "bitbucket" | "bb" => Some(RepositoryHost::BitBucket),
-      | _ => None,
+      | "github" | "gh" => Host::Known(RepositoryHost::GitHub),
+      | "gitlab" | "gl" => Host::Known(RepositoryHost::GitLab),
+      | "bitbucket" | "bb" => Host::Known(RepositoryHost::BitBucket),
+      | _ => Host::Unknown,
     })
     .labelled("Host can't be zero-length.");
 
@@ -97,7 +91,7 @@ fn produce_result(data: ParseResult) -> Result<Repository, AppError> {
       let meta = meta.unwrap_or_default();
       let host = host.unwrap_or_default();
 
-      if let Some(host) = host {
+      if let Host::Known(host) = host {
         Ok(Repository {
           host,
           user,

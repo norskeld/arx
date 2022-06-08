@@ -1,8 +1,11 @@
 {
   "editor.rulers": [100],
   "editor.formatOnSave": true,
-  "editor.inlayHints.enabled": "offUnlessPressed",
+  "editor.inlayHints.enabled": "off",
   "rust-analyzer.rustfmt.extraArgs": ["+nightly"],
   "rust-analyzer.diagnostics.disabled": ["macro-error"],
-  "rust-analyzer.lens.enable": true
+  "rust-analyzer.lens.enable": true,
+  "rust-analyzer.server.extraEnv": {
+    "CHALK_OVERFLOW_DEPTH": "1000"
+  }
 }

@@ -20,7 +20,7 @@ actions {
   }
 
   suite name="lint" requires="init" {
-    run "cargo fmt" "cargo clippy"
+    run "cargo fmt"
   }
 
   suite name="git" requires="init lint" {

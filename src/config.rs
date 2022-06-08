@@ -48,11 +48,11 @@ pub fn get_actions(doc: &KdlDocument) -> Option<Action> {
       let nodes = children.nodes();
 
       if nodes.iter().all(is_suite) {
-        let suites = nodes.iter().filter_map(to_sequence).collect::<Vec<_>>();
+        let suites = nodes.iter().filter_map(to_action_suite).collect::<Vec<_>>();
         Action::Suite(suites)
       } else {
-        let operations = nodes.iter().filter_map(to_operation).collect::<Vec<_>>();
-        Action::Single(operations)
+        let actions = nodes.iter().filter_map(to_action).collect::<Vec<_>>();
+        Action::Single(actions)
       }
     })
 }
@@ -77,8 +77,8 @@ fn to_replacement(node: &KdlNode) -> Option<Replacement> {
   Some(Replacement { tag, description })
 }
 
-fn to_operation(node: &KdlNode) -> Option<ActionSingle> {
-  let action = to_action(node);
+fn to_action(node: &KdlNode) -> Option<ActionSingle> {
+  let action = to_action_single(node);
 
   if let ActionSingle::Unknown = action {
     None
@@ -87,7 +87,7 @@ fn to_operation(node: &KdlNode) -> Option<ActionSingle> {
   }
 }
 
-fn to_sequence(node: &KdlNode) -> Option<ActionSuite> {
+fn to_action_suite(node: &KdlNode) -> Option<ActionSuite> {
   let name = node.get("name").map(entry_to_string);
   let requirements = node.get("requires").map(entry_to_string).map(|value| {
     value
@@ -96,9 +96,13 @@ fn to_sequence(node: &KdlNode) -> Option<ActionSuite> {
       .collect::<Vec<String>>()
   });
 
-  let actions = node
-    .children()
-    .map(|children| children.nodes().iter().map(to_action).collect::<Vec<_>>());
+  let actions = node.children().map(|children| {
+    children
+      .nodes()
+      .iter()
+      .map(to_action_single)
+      .collect::<Vec<_>>()
+  });
 
   let suite = (
     name,
@@ -116,7 +120,7 @@ fn to_sequence(node: &KdlNode) -> Option<ActionSuite> {
   }
 }
 
-fn to_action(node: &KdlNode) -> ActionSingle {
+fn to_action_single(node: &KdlNode) -> ActionSingle {
   let action_kind = node.name().to_string();
 
   match action_kind.to_ascii_lowercase().as_str() {

@@ -6,5 +6,6 @@ pub mod app;
 pub mod config;
 
 mod extract;
+mod graph;
 mod parser;
 mod repository;

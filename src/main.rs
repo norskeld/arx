@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 
 use kdl::KdlDocument;
-use imp::config;
+use imp::config::{self, Action};
 
 // use imp::app::{self, AppError};
 
@@ -12,14 +12,21 @@ use imp::config;
 // }
 
 fn main() -> std::io::Result<()> {
-  let mut filename = env::current_dir()?;
-  filename.push("imp.kdl");
+  let filename = env::current_dir()?.join("imp.kdl");
 
   let contents = fs::read_to_string(filename)?;
   let doc: KdlDocument = contents.parse().expect("Failed to parse config file.");
 
-  println!("{:#?}", config::get_replacements(&doc));
-  println!("{:#?}", config::get_actions(&doc));
+  let actions = config::get_actions(&doc);
+
+  actions.map(|action| {
+    if let Action::Suite(suites) = action {
+      let (resolved, unresolved) = config::resolve_requirements(&suites);
+
+      println!("Resolved: {resolved:#?}");
+      println!("Unresolved: {unresolved:#?}");
+    }
+  });
 
   Ok(())
 }

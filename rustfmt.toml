@@ -1,11 +1,16 @@
 # Enable unstable features, e.g. group_imports.
 unstable_features = true
+edition = "2021"
 
 # Imports.
 imports_indent = "Block"
 imports_layout = "Mixed"
 group_imports = "StdExternalCrate"
-reorder_imports = false
+reorder_imports = true
+
+# Enums, structs, etc.
+reorder_impl_items = true
+use_field_init_shorthand = true
 
 # Tabs & spaces.
 tab_spaces = 2
@@ -20,3 +25,11 @@ max_width = 100
 
 # Match tweaks.
 match_arm_leading_pipes = "Always" # Because I'm a weirdo.
+force_multiline_blocks = true
+
+# Comments.
+wrap_comments = true
+comment_width = 100
+
+# Etc.
+condense_wildcard_suffixes = true

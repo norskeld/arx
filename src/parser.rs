@@ -31,11 +31,13 @@ fn host() -> impl Parser<char, Host, Error = Cheap<char>> {
     .repeated()
     .at_least(1)
     .collect::<String>()
-    .map(|variant| match variant.as_str() {
-      | "github" | "gh" => Host::Known(RepositoryHost::GitHub),
-      | "gitlab" | "gl" => Host::Known(RepositoryHost::GitLab),
-      | "bitbucket" | "bb" => Host::Known(RepositoryHost::BitBucket),
-      | _ => Host::Unknown,
+    .map(|variant| {
+      match variant.as_str() {
+        | "github" | "gh" => Host::Known(RepositoryHost::GitHub),
+        | "gitlab" | "gl" => Host::Known(RepositoryHost::GitLab),
+        | "bitbucket" | "bb" => Host::Known(RepositoryHost::BitBucket),
+        | _ => Host::Unknown,
+      }
     })
     .labelled("Host can't be zero-length.");
 

@@ -82,7 +82,7 @@ fn meta() -> impl Parser<char, RepositoryMeta, Error = Cheap<char>> {
     .at_least(1)
     .labelled("Meta can't be zero-length.")
     .collect::<String>()
-    .map(|meta| RepositoryMeta(meta));
+    .map(RepositoryMeta);
 
   just('#').ignore_then(meta)
 }

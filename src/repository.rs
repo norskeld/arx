@@ -1,5 +1,3 @@
-use reqwest;
-
 use crate::app::AppError;
 
 /// Supported hosts. [GitHub][RepositoryHost::GitHub] is the default one.
@@ -67,7 +65,7 @@ impl Repository {
         format!("https://github.com/{user}/{repo}/archive/{meta}.tar.gz")
       },
       | RepositoryHost::GitLab => {
-        format!("https://gitlab.com/{user}/{repo}/repository/archive.tar.gz?ref={meta}")
+        format!("https://gitlab.com/{user}/{repo}/-/archive/{meta}/{repo}.tar.gz")
       },
       | RepositoryHost::BitBucket => {
         format!("https://bitbucket.org/{user}/{repo}/get/{meta}.tar.gz")
@@ -77,10 +75,12 @@ impl Repository {
 
   /// Fetches the tarball using the resolved URL, and reads it into bytes (`Vec<u8>`).
   pub(crate) async fn fetch(&self) -> Result<Vec<u8>, AppError> {
-    let response = reqwest::get(self.get_tar_url()).await.map_err(|err| {
+    let url = self.get_tar_url();
+
+    let response = reqwest::get(url).await.map_err(|err| {
       err
         .status()
-        .map_or(AppError(format!("Request failed.")), |status| {
+        .map_or(AppError("Request failed.".to_string()), |status| {
           AppError(format!(
             "Request failed with the code: {code}.",
             code = status.as_u16()
@@ -88,12 +88,10 @@ impl Repository {
         })
     })?;
 
-    let bytes = response
+    response
       .bytes()
       .await
       .map(|bytes| bytes.to_vec())
-      .map_err(|_| AppError(format!("Couldn't get the response body as bytes.")))?;
-
-    Ok(bytes)
+      .map_err(|_| AppError("Couldn't get the response body as bytes.".to_string()))
   }
 }

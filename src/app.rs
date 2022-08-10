@@ -1,15 +1,17 @@
-use std::fmt::Display;
+use std::fmt;
 
 use clap::Parser;
 
 use crate::parser;
+use crate::repository::Repository;
+use crate::tar;
 
 /// Newtype for app errors which get propagated across the app.
 #[derive(Debug)]
 pub struct AppError(pub String);
 
-impl Display for AppError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for AppError {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{message}", message = self.0)
   }
 }
@@ -50,14 +52,14 @@ pub struct App {
   tag: Option<String>,
 }
 
-pub fn run() {
+pub async fn run() -> Result<(), AppError> {
   let options = App::parse();
+  let repository = parser::shortcut(&options.target)?;
+  let bytes = repository.fetch().await?;
 
-  match parser::shortcut(&options.target) {
-    | Ok(repository) => {
-      println!("{:#?}", repository);
-      println!("{:#?}", repository.get_tar_url());
-    },
-    | Err(error) => eprintln!("{}", error),
-  }
+  let Repository { repo, .. } = repository;
+
+  tar::unpack(&bytes, &options.path.unwrap_or(repo))?;
+
+  Ok(())
 }

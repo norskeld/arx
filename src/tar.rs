@@ -72,8 +72,6 @@ fn create_output_structure(dest_path: &PathBuf) -> Result<(), AppError> {
 /// Produces a "fixed" path for an entry.
 #[inline(always)]
 fn fix_entry_path(entry_path: &Path, dest_path: &PathBuf) -> PathBuf {
-  let dest_path = PathBuf::from(dest_path);
-
   dest_path
     .components()
     .chain(entry_path.components().skip(1))

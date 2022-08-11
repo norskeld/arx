@@ -1,4 +1,4 @@
-use imp::app::{self, AppError};
+use arx::app::{self, AppError};
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -12,7 +12,7 @@ async fn main() -> Result<(), AppError> {
 // use imp::config::{self, Action};
 
 // fn main() -> std::io::Result<()> {
-//   let filename = env::current_dir()?.join("imp.kdl");
+//   let filename = env::current_dir()?.join("arx.kdl");
 
 //   let contents = fs::read_to_string(filename)?;
 //   let doc: KdlDocument = contents.parse().expect("Failed to parse config file.");

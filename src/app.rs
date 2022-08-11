@@ -3,7 +3,7 @@ use std::fmt;
 use clap::Parser;
 
 use crate::parser;
-use crate::repository::Repository;
+use crate::repository::{Repository, RepositoryMeta};
 use crate::tar;
 
 /// Newtype for app errors which get propagated across the app.
@@ -39,27 +39,25 @@ pub struct App {
   #[clap(short, long, display_order = 2)]
   ignore: bool,
 
-  /// Download a specific branch.
+  /// Download at specific ref (branch, tag, commit).
   #[clap(short, long, display_order = 3)]
-  branch: Option<String>,
-
-  /// Download at specific commit.
-  #[clap(short, long, display_order = 4)]
-  commit: Option<String>,
-
-  /// Download at specific tag.
-  #[clap(short, long, display_order = 5)]
-  tag: Option<String>,
+  meta: Option<String>,
 }
 
 pub async fn run() -> Result<(), AppError> {
   let options = App::parse();
+
+  // Parse repository information from the CLI argument.
   let repository = parser::shortcut(&options.target)?;
-  let bytes = repository.fetch().await?;
 
-  let Repository { repo, .. } = repository;
+  // Now check if any specific meta (ref) was passed, if so, then use it; otherwise use parsed meta.
+  let meta = options.meta.map_or(repository.meta, RepositoryMeta);
+  let repository = Repository { meta, ..repository };
 
-  tar::unpack(&bytes, &options.path.unwrap_or(repo))?;
+  // Fetch the tarball as bytes (compressed).
+  let tarball = repository.fetch().await?;
+
+  tar::unpack(&tarball, &options.path.unwrap_or(repository.repo))?;
 
   Ok(())
 }

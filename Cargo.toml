@@ -8,14 +8,14 @@ repository = "https://github.com/norskeld/arx"
 publish = false
 
 [dependencies]
-chumsky = { version = "0.8" }
-clap = { version = "3.0", features = ["cargo", "derive"] }
-flate2 = { version = "1.0" }
+chumsky = { version = "0.8.0" }
+clap = { version = "3.2.16", features = ["cargo", "derive"] }
+flate2 = { version = "1.0.24" }
 kdl = "4.2"
-petgraph = { version = "0.6", features = ["stable_graph"] }
-reqwest = { version = "0.11", features = ["json"] }
-tar = { version = "0.4" }
-tokio = { version = "1.16", features = ["macros", "rt-multi-thread"] }
+petgraph = { version = "0.6.2", features = ["stable_graph"] }
+reqwest = { version = "0.11.11", features = ["json"] }
+tar = { version = "0.4.38" }
+tokio = { version = "1.20.1", features = ["macros", "rt-multi-thread"] }
 
 [profile.release]
 lto = "thin"

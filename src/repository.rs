@@ -35,8 +35,9 @@ pub(crate) struct RepositoryMeta(pub String);
 
 impl Default for RepositoryMeta {
   fn default() -> Self {
-    // TODO: Get the default value for meta from somewhere else, e.g. from env variables or config.
-    RepositoryMeta("master".to_string())
+    // Using "HEAD" instead of hardcoding the default branch name like "master" or "main".
+    // Suprisingly, works just fine.
+    RepositoryMeta("HEAD".to_string())
   }
 }
 

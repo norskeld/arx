@@ -1,6 +1,5 @@
-use std::ffi::OsString;
-use std::mem;
-use std::path::{Component, Path, PathBuf};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use flate2::bufread::GzDecoder;
 use tar::Archive;
@@ -20,23 +19,26 @@ const USE_PERMISSIONS: bool = false;
 const USE_PERMISSIONS: bool = true;
 
 /// Unpacks a given tar archive.
-pub(crate) fn unpack(bytes: &[u8], destination: &String) -> Result<Vec<PathBuf>, AppError> {
+pub(crate) fn unpack(bytes: &[u8], dest: &String) -> Result<Vec<PathBuf>, AppError> {
   let mut archive = Archive::new(GzDecoder::new(bytes));
   let mut written_paths = Vec::new();
+  let dest_path = PathBuf::from(dest);
 
   // Get iterator over the entries.
   let raw_entries = archive
     .entries()
     .map_err(|_| AppError("Couldn't get entries from the tarball.".to_string()))?;
 
+  // Create output structure (if necessary).
+  create_output_structure(&dest_path)?;
+
   for mut entry in raw_entries.flatten() {
     let entry_path = entry
       .path()
-      .map_err(|_| AppError("Couldn't obtain the entry's path.".to_string()))?;
+      .map_err(|_| AppError("Couldn't get the entry's path.".to_string()))?;
 
-    let fixed_path = fix_entry_path(&entry_path, destination)?;
+    let fixed_path = fix_entry_path(&entry_path, &dest_path);
 
-    entry.set_preserve_mtime(true);
     entry.set_preserve_permissions(USE_PERMISSIONS);
     entry.set_unpack_xattrs(USE_XATTRS);
 
@@ -53,27 +55,27 @@ pub(crate) fn unpack(bytes: &[u8], destination: &String) -> Result<Vec<PathBuf>,
   Ok(written_paths)
 }
 
-/// Produces a "fixed" path for an entry.
+/// Recursively creates the output structure if there's more than 1 component in the destination
+/// path AND if the destination path does not exist.
 #[inline(always)]
-fn fix_entry_path(entry_path: &Path, destination: &String) -> Result<PathBuf, AppError> {
-  // Convert repo name from [String] to [OsString] to create a path [Component].
-  let repo_name = OsString::from(destination);
-
-  // Get the entry path components, the first one will be replaced.
-  let mut components = entry_path.components().collect::<Vec<_>>();
-
-  if !components.is_empty() {
-    // Replace the first (root) component with the component containing actual repo name.
-    let _ = mem::replace(&mut components[0], Component::Normal(&repo_name));
-
-    let path = components
-      .iter()
-      .fold(PathBuf::new(), |acc, next| acc.join(next));
-
-    return Ok(path);
+fn create_output_structure(dest_path: &PathBuf) -> Result<(), AppError> {
+  // FIXME: The use of `exists` method here is a bit worrisome, since it can open possibilities for
+  //  TOCTOU attacks, so should probably replace with `try_exists`.
+  if dest_path.iter().count().gt(&1) && !dest_path.exists() {
+    fs::create_dir_all(&dest_path)
+      .map_err(|_| AppError("Couldn't create the output structure.".to_string()))?;
   }
 
-  Err(AppError(
-    "Couldn't get the first component of the entry's path, because it's empty.".to_string(),
-  ))
+  Ok(())
+}
+
+/// Produces a "fixed" path for an entry.
+#[inline(always)]
+fn fix_entry_path(entry_path: &Path, dest_path: &PathBuf) -> PathBuf {
+  let dest_path = PathBuf::from(dest_path);
+
+  dest_path
+    .components()
+    .chain(entry_path.components().skip(1))
+    .fold(PathBuf::new(), |acc, next| acc.join(next))
 }

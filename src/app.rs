@@ -1,7 +1,9 @@
 use std::fmt;
+use std::path::PathBuf;
 
 use clap::Parser;
 
+use crate::config::{self, Action};
 use crate::parser;
 use crate::repository::{Repository, RepositoryMeta};
 use crate::tar;
@@ -57,7 +59,39 @@ pub async fn run() -> Result<(), AppError> {
   // Fetch the tarball as bytes (compressed).
   let tarball = repository.fetch().await?;
 
-  tar::unpack(&tarball, &options.path.unwrap_or(repository.repo))?;
+  // Get destination path.
+  let destination = options
+    .path
+    .map(PathBuf::from)
+    .unwrap_or(PathBuf::from(repository.repo));
+
+  // Decompress and unpack the tarball.
+  tar::unpack(&tarball, &destination)?;
+
+  // Read the kdl config.
+  let arx_config = config::resolve_arx_config(&destination)?;
+
+  // Get replacements and actions.
+  let replacements = config::get_replacements(&arx_config);
+  let actions = config::get_actions(&arx_config);
+
+  replacements.map(|items| {
+    items.iter().for_each(|item| {
+      let tag = &item.tag;
+      let description = &item.description;
+
+      println!("{tag} = {description}");
+    })
+  });
+
+  actions.map(|action| {
+    if let Action::Suite(suites) = action {
+      let (resolved, unresolved) = config::resolve_requirements(&suites);
+
+      println!("Resolved: {resolved:#?}");
+      println!("Unresolved: {unresolved:#?}");
+    }
+  });
 
   Ok(())
 }

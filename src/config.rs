@@ -1,5 +1,9 @@
+use std::fs;
+use std::path::Path;
+
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 
+use crate::app::AppError;
 use crate::graph::{DependenciesGraph, Node, Step};
 
 /// Represents a replacement action.
@@ -94,6 +98,20 @@ pub enum ActionSingle {
   Run { command: Option<String> },
   /// Fallback action for pattern matching ergonomics.
   Unknown,
+}
+
+/// Resolves, reads and parses an arx config into a [KdlDocument].
+pub fn resolve_arx_config(root: &Path) -> Result<KdlDocument, AppError> {
+  let filename = root.join("arx.kdl");
+
+  let contents = fs::read_to_string(filename)
+    .map_err(|_| AppError("Couldn't read the config file.".to_string()))?;
+
+  let document: KdlDocument = contents
+    .parse()
+    .map_err(|_| AppError("Couldn't parse the config file.".to_string()))?;
+
+  Ok(document)
 }
 
 /// Resolves requirements (dependencies) for an [ActionSuite].

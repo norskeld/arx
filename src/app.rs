@@ -63,7 +63,7 @@ pub async fn run() -> Result<(), AppError> {
   let destination = options
     .path
     .map(PathBuf::from)
-    .unwrap_or(PathBuf::from(repository.repo));
+    .unwrap_or_else(|| PathBuf::from(repository.repo));
 
   // Decompress and unpack the tarball.
   tar::unpack(&tarball, &destination)?;
@@ -75,16 +75,16 @@ pub async fn run() -> Result<(), AppError> {
   let replacements = config::get_replacements(&arx_config);
   let actions = config::get_actions(&arx_config);
 
-  replacements.map(|items| {
+  if let Some(items) = replacements {
     items.iter().for_each(|item| {
       let tag = &item.tag;
       let description = &item.description;
 
       println!("{tag} = {description}");
     })
-  });
+  }
 
-  actions.map(|action| {
+  if let Some(action) = actions {
     match action {
       | Action::Suite(suites) => {
         let (resolved, unresolved) = config::resolve_requirements(&suites);
@@ -98,7 +98,7 @@ pub async fn run() -> Result<(), AppError> {
         println!("Resolved: {actions:#?}");
       },
     }
-  });
+  }
 
   Ok(())
 }

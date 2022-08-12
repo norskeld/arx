@@ -58,7 +58,7 @@ pub(crate) fn unpack(bytes: &[u8], dest: &String) -> Result<Vec<PathBuf>, AppErr
 /// Recursively creates the output structure if there's more than 1 component in the destination
 /// path AND if the destination path does not exist.
 #[inline(always)]
-fn create_output_structure(dest_path: &PathBuf) -> Result<(), AppError> {
+fn create_output_structure(dest_path: &Path) -> Result<(), AppError> {
   // FIXME: The use of `exists` method here is a bit worrisome, since it can open possibilities for
   //  TOCTOU attacks, so should probably replace with `try_exists`.
   if dest_path.iter().count().gt(&1) && !dest_path.exists() {
@@ -71,7 +71,7 @@ fn create_output_structure(dest_path: &PathBuf) -> Result<(), AppError> {
 
 /// Produces a "fixed" path for an entry.
 #[inline(always)]
-fn fix_entry_path(entry_path: &Path, dest_path: &PathBuf) -> PathBuf {
+fn fix_entry_path(entry_path: &Path, dest_path: &Path) -> PathBuf {
   dest_path
     .components()
     .chain(entry_path.components().skip(1))

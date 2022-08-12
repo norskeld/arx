@@ -85,11 +85,18 @@ pub async fn run() -> Result<(), AppError> {
   });
 
   actions.map(|action| {
-    if let Action::Suite(suites) = action {
-      let (resolved, unresolved) = config::resolve_requirements(&suites);
+    match action {
+      | Action::Suite(suites) => {
+        let (resolved, unresolved) = config::resolve_requirements(&suites);
 
-      println!("Resolved: {resolved:#?}");
-      println!("Unresolved: {unresolved:#?}");
+        println!("-- Action suites:");
+        println!("Resolved: {resolved:#?}");
+        println!("Unresolved: {unresolved:#?}");
+      },
+      | Action::Single(actions) => {
+        println!("-- Actions:");
+        println!("Resolved: {actions:#?}");
+      },
     }
   });
 

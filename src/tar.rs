@@ -44,9 +44,9 @@ pub(crate) fn unpack(bytes: &[u8], dest: &String) -> Result<Vec<PathBuf>, AppErr
 
     entry
       .unpack(&fixed_path)
-      // Side effect: collecting written paths for logging purposes.
-      .inspect(|_| written_paths.push(fixed_path))
       .map_err(|_| AppError("Couldn't unpack the entry.".to_string()))?;
+
+    written_paths.push(fixed_path);
   }
 
   // Deduplicate, because it **will** contain duplicates.

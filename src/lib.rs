@@ -1,4 +1,3 @@
-#![feature(result_option_inspect)]
 #![allow(dead_code)]
 
 pub mod app;

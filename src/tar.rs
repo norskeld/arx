@@ -29,14 +29,14 @@ pub(crate) fn unpack(bytes: &[u8], dest_path: &Path) -> Result<Vec<PathBuf>, App
     .map_err(|_| AppError("Couldn't get entries from the tarball.".to_string()))?;
 
   // Create output structure (if necessary).
-  create_output_structure(&dest_path)?;
+  create_output_structure(dest_path)?;
 
   for mut entry in raw_entries.flatten() {
     let entry_path = entry
       .path()
       .map_err(|_| AppError("Couldn't get the entry's path.".to_string()))?;
 
-    let fixed_path = fix_entry_path(&entry_path, &dest_path);
+    let fixed_path = fix_entry_path(&entry_path, dest_path);
 
     entry.set_preserve_permissions(USE_PERMISSIONS);
     entry.set_unpack_xattrs(USE_XATTRS);

@@ -19,10 +19,9 @@ const USE_PERMISSIONS: bool = false;
 const USE_PERMISSIONS: bool = true;
 
 /// Unpacks a given tar archive.
-pub(crate) fn unpack(bytes: &[u8], dest: &String) -> Result<Vec<PathBuf>, AppError> {
+pub(crate) fn unpack(bytes: &[u8], dest_path: &Path) -> Result<Vec<PathBuf>, AppError> {
   let mut archive = Archive::new(GzDecoder::new(bytes));
   let mut written_paths = Vec::new();
-  let dest_path = PathBuf::from(dest);
 
   // Get iterator over the entries.
   let raw_entries = archive

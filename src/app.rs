@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use clap::Parser;
 
 use crate::config::{self, Action};
-use crate::parser;
 use crate::repository::{Repository, RepositoryMeta};
 use crate::tar;
+use crate::{parser, processing};
 
 /// Newtype for app errors which get propagated across the app.
 #[derive(Debug)]
@@ -66,7 +66,7 @@ pub async fn run() -> Result<(), AppError> {
     .unwrap_or_else(|| PathBuf::from(repository.repo));
 
   // Decompress and unpack the tarball.
-  tar::unpack(&tarball, &destination)?;
+  let unpacked = tar::unpack(&tarball, &destination)?;
 
   // Read the kdl config.
   let arx_config = config::resolve_arx_config(&destination)?;
@@ -76,12 +76,7 @@ pub async fn run() -> Result<(), AppError> {
   let actions = config::get_actions(&arx_config);
 
   if let Some(items) = replacements {
-    items.iter().for_each(|item| {
-      let tag = &item.tag;
-      let description = &item.description;
-
-      println!("{tag} = {description}");
-    })
+    processing::process_replacements(&unpacked, &items).await?;
   }
 
   if let Some(action) = actions {
@@ -90,12 +85,12 @@ pub async fn run() -> Result<(), AppError> {
         let (resolved, unresolved) = config::resolve_requirements(&suites);
 
         println!("-- Action suites:");
-        println!("Resolved: {resolved:#?}");
-        println!("Unresolved: {unresolved:#?}");
+        println!("Resolved: {resolved:?}");
+        println!("Unresolved: {unresolved:?}");
       },
       | Action::Single(actions) => {
         println!("-- Actions:");
-        println!("Resolved: {actions:#?}");
+        println!("Resolved: {actions:?}");
       },
     }
   }

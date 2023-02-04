@@ -1,6 +1,6 @@
 # arx
 
-[![Checks](https://img.shields.io/github/workflow/status/norskeld/arx/checks?style=flat-square&colorA=22272d&colorB=22272d&label=checks)](https://github.com/norskeld/arx/actions/workflows/checks.yml)
+[![Checks](https://img.shields.io/github/actions/workflow/status/norskeld/arx/checks.yml?style=flat-square&colorA=22272d&colorB=22272d&label=checks)](https://github.com/norskeld/arx/actions)
 
 > `A`ugmented `R`epository E`x`tractor
 

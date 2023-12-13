@@ -27,7 +27,7 @@ pub(crate) fn shortcut(input: &str) -> Result<Repository, AppError> {
 /// - `gitlab` or `gl`
 /// - `bitbucket` or `bb`
 fn host() -> impl Parser<char, Host, Error = Cheap<char>> {
-  let host = filter::<_, _, Cheap<char>>(|ch: &char| ch.is_ascii_alphabetic())
+  let host = filter::<_, _, Cheap<char>>(char::is_ascii_alphabetic)
     .repeated()
     .at_least(1)
     .collect::<String>()

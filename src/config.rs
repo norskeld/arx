@@ -1,10 +1,12 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 
 use crate::app::AppError;
 use crate::graph::{DependenciesGraph, Node, Step};
+
+const ARX_CONFIG_NAME: &str = "arx.kdl";
 
 /// Represents a replacement action.
 #[derive(Debug)]
@@ -60,8 +62,11 @@ pub enum Action {
 /// suites (hence the **requirements** field).
 #[derive(Clone, Debug)]
 pub struct ActionSuite {
+  /// Suite name.
   pub name: String,
+  /// Suite actions to run (synchronously).
   pub actions: Vec<ActionSingle>,
+  /// Other actions this suite depends on.
   pub requirements: Vec<String>,
 }
 
@@ -82,27 +87,36 @@ impl Node for ActionSuite {
 pub enum ActionSingle {
   /// Copies a file or directory. Glob-friendly. Overwrites by default.
   Copy {
-    from: Option<String>,
-    to: Option<String>,
+    from: Option<PathBuf>,
+    to: Option<PathBuf>,
     overwrite: bool,
   },
   /// Moves a file or directory. Glob-friendly. Overwrites by default.
   Move {
-    from: Option<String>,
-    to: Option<String>,
+    from: Option<PathBuf>,
+    to: Option<PathBuf>,
     overwrite: bool,
   },
   /// Deletes a file or directory. Glob-friendly.
-  Delete { target: Option<String> },
+  Delete { target: Option<PathBuf> },
   /// Runs an arbitrary command in the shell.
   Run { command: Option<String> },
-  /// Fallback action for pattern matching ergonomics.
-  Unknown,
+  /// Fallback action for pattern matching ergonomics and reporting purposes.
+  Unknown { name: String },
+}
+
+/// Checks if arx config exists under the given directory.
+pub fn has_arx_config(root: &Path) -> bool {
+  // TODO: Allow to override the config name.
+  let file = root.join(ARX_CONFIG_NAME);
+  let file_exists = file.try_exists();
+
+  file_exists.is_ok()
 }
 
 /// Resolves, reads and parses an arx config into a [KdlDocument].
 pub fn resolve_arx_config(root: &Path) -> Result<KdlDocument, AppError> {
-  let filename = root.join("arx.kdl");
+  let filename = root.join(ARX_CONFIG_NAME);
 
   let contents = fs::read_to_string(filename)
     .map_err(|_| AppError("Couldn't read the config file.".to_string()))?;
@@ -132,15 +146,15 @@ pub fn resolve_requirements(suites: &[ActionSuite]) -> (Vec<ActionSuite>, Vec<St
 pub fn get_actions(doc: &KdlDocument) -> Option<Action> {
   doc
     .get("actions")
-    .and_then(|node| node.children())
+    .and_then(KdlNode::children)
     .map(|children| {
       let nodes = children.nodes();
 
       if nodes.iter().all(is_suite) {
-        let suites = nodes.iter().filter_map(to_action_suite).collect::<Vec<_>>();
+        let suites = nodes.iter().filter_map(to_action_suite).collect();
         Action::Suite(suites)
       } else {
-        let actions = nodes.iter().filter_map(to_action).collect::<Vec<_>>();
+        let actions = nodes.iter().filter_map(to_action_single).collect();
         Action::Single(actions)
       }
     })
@@ -150,7 +164,7 @@ pub fn get_actions(doc: &KdlDocument) -> Option<Action> {
 pub fn get_replacements(doc: &KdlDocument) -> Option<Vec<Replacement>> {
   doc
     .get("replacements")
-    .and_then(|node| node.children())
+    .and_then(KdlNode::children)
     .map(|children| {
       children
         .nodes()
@@ -164,6 +178,7 @@ pub fn get_replacements(doc: &KdlDocument) -> Option<Vec<Replacement>> {
 
 fn to_replacement(node: &KdlNode) -> Option<Replacement> {
   let tag = node.name().to_string();
+
   let description = node
     .get(0)
     .and_then(entry_to_string)
@@ -172,18 +187,9 @@ fn to_replacement(node: &KdlNode) -> Option<Replacement> {
   Some(Replacement { tag, description })
 }
 
-fn to_action(node: &KdlNode) -> Option<ActionSingle> {
-  let action = to_action_single(node);
-
-  if let ActionSingle::Unknown = action {
-    None
-  } else {
-    Some(action)
-  }
-}
-
 fn to_action_suite(node: &KdlNode) -> Option<ActionSuite> {
   let name = node.get("name").and_then(entry_to_string);
+
   let requirements = node.get("requires").and_then(entry_to_string).map(|value| {
     value
       .split_ascii_whitespace()
@@ -195,7 +201,7 @@ fn to_action_suite(node: &KdlNode) -> Option<ActionSuite> {
     children
       .nodes()
       .iter()
-      .map(to_action_single)
+      .filter_map(to_action_single)
       .collect::<Vec<_>>()
   });
 
@@ -218,33 +224,33 @@ fn to_action_suite(node: &KdlNode) -> Option<ActionSuite> {
 }
 
 /// TODO: This probably should be refactored and abstracted away into something separate.
-fn to_action_single(node: &KdlNode) -> ActionSingle {
+fn to_action_single(node: &KdlNode) -> Option<ActionSingle> {
   let action_kind = node.name().to_string();
 
-  match action_kind.to_ascii_lowercase().as_str() {
+  let action = match action_kind.to_ascii_lowercase().as_str() {
     | "copy" => {
       ActionSingle::Copy {
-        from: node.get("from").and_then(entry_to_string),
-        to: node.get("to").and_then(entry_to_string),
+        from: node.get("from").and_then(entry_to_pathbuf),
+        to: node.get("to").and_then(entry_to_pathbuf),
         overwrite: node
           .get("overwrite")
-          .and_then(|value| value.value().as_bool())
+          .and_then(entry_to_bool)
           .unwrap_or(true),
       }
     },
     | "move" => {
       ActionSingle::Move {
-        from: node.get("from").and_then(entry_to_string),
-        to: node.get("to").and_then(entry_to_string),
+        from: node.get("from").and_then(entry_to_pathbuf),
+        to: node.get("to").and_then(entry_to_pathbuf),
         overwrite: node
           .get("overwrite")
-          .and_then(|value| value.value().as_bool())
+          .and_then(entry_to_bool)
           .unwrap_or(true),
       }
     },
     | "delete" => {
       ActionSingle::Delete {
-        target: node.get(0).and_then(entry_to_string),
+        target: node.get(0).and_then(entry_to_pathbuf),
       }
     },
     | "run" => {
@@ -252,8 +258,14 @@ fn to_action_single(node: &KdlNode) -> ActionSingle {
         command: node.get(0).and_then(entry_to_string),
       }
     },
-    | _ => ActionSingle::Unknown,
-  }
+    | action => {
+      ActionSingle::Unknown {
+        name: action.to_string(),
+      }
+    },
+  };
+
+  Some(action)
 }
 
 fn is_suite(node: &KdlNode) -> bool {
@@ -262,4 +274,12 @@ fn is_suite(node: &KdlNode) -> bool {
 
 fn entry_to_string(entry: &KdlEntry) -> Option<String> {
   entry.value().as_string().map(str::to_string)
+}
+
+fn entry_to_bool(entry: &KdlEntry) -> Option<bool> {
+  entry.value().as_bool()
+}
+
+fn entry_to_pathbuf(entry: &KdlEntry) -> Option<PathBuf> {
+  entry.value().as_string().map(PathBuf::from)
 }

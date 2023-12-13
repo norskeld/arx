@@ -1,17 +1,12 @@
 use crate::app::AppError;
 
 /// Supported hosts. [GitHub][RepositoryHost::GitHub] is the default one.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) enum RepositoryHost {
+  #[default]
   GitHub,
   GitLab,
   BitBucket,
-}
-
-impl Default for RepositoryHost {
-  fn default() -> Self {
-    RepositoryHost::GitHub
-  }
 }
 
 /// Container for a repository host.

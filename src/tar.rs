@@ -61,7 +61,7 @@ fn create_output_structure(dest_path: &Path) -> Result<(), AppError> {
   // FIXME: The use of `exists` method here is a bit worrisome, since it can open possibilities for
   //  TOCTOU attacks, so should probably replace with `try_exists`.
   if dest_path.iter().count().gt(&1) && !dest_path.exists() {
-    fs::create_dir_all(&dest_path)
+    fs::create_dir_all(dest_path)
       .map_err(|_| AppError("Couldn't create the output structure.".to_string()))?;
   }
 

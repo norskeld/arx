@@ -1,0 +1,141 @@
+// Options defined here can be overridden from CLI.
+options {
+  // Remove arx.kdl after it's done. Defaults to `true`.
+  remove false
+}
+
+// Actions to run after the repository was successfully downloaded and unpacked. All actions or
+// suites of actions run sequentially, there is no concurrency or out-of-order execution for
+// predictable outcome.
+//
+// You can define either suites of actions — named groups of actions — or a flat list of actions,
+// but not both.
+//
+// Notes:
+//
+// - Unpacking into an existing destination is forbidden.
+// - Invalid or unknown actions, nodes or replacements will be skipped. Warnings will be issued.
+// - Action failure terminates the main process.
+// - No cleanup on failures whatsoever.
+actions {
+  suite "hello" {
+    // This action simply echoes the argument into stdout. Raw strings are trimmed and aligned to
+    // the leftmost non-whitespace character.
+    echo r#"
+      Sup! Let's set everything up. We will:
+
+      - Print this message.
+      - Ask some questions via prompts.
+      - Initialize git repository.
+      - Run some commands that will use input from prompts.
+      - Commit everything.
+    "#
+  }
+
+  suite "git" {
+    // This action runs a given shell command and prints its output to stdout.
+    run "git init"
+  }
+
+  // In this suite we run a series of prompts asking different questions.
+  //
+  // Answers will be stored globally and available from any _subsequent_ action ar suite of actions.
+  suite "prompts" {
+    // Simple text prompt.
+    prompt "R_NAME" {
+      type "input"
+      hint "Repository name"
+      default "norskeld/serpent"
+    }
+
+    // This will run user's $EDITOR.
+    prompt "R_DESC" {
+      type "editor"
+      hint "Repository description"
+    }
+
+    // If you don't specify prompt `type`, it will default to "input".
+    prompt "R_AUTHOR" {
+      hint "Repository author"
+      default "Vladislav M."
+    }
+
+    // Simple select prompt.
+    prompt "R_PM" {
+      type "select"
+      hint "Package manager of choice"
+      variants "npm" "pnpm" "yarn" "bun"
+      default "npm"
+    }
+
+    // If you don't specify default value using `default` node it will be an empty string.
+    prompt "R_PM_ARGS" {
+      hint "Additional arguments for package manager"
+    }
+  }
+
+  // Here we demonstrate using replacements.
+  suite "replacements" {
+    // Replace all occurences of given replacements in files that match the glob pattern.
+    replace in=".template/**" {
+      "R_NAME"
+      "R_DESC"
+      "R_AUTHOR"
+    }
+
+    // Replace all occurences of given replacements in _all_ files. This is equivalent to "." as the
+    // glob pattern.
+    replace {
+      "R_PM"
+    }
+
+    // Trying to run a non-existent replacement will do nothing (a warning will be issued though).
+    replace {
+      "NONEXISTENTREPLACEMENT"
+    }
+  }
+
+  // In this suite we demonstrate actions for operating on files. All these actions support glob
+  // patterns, except the `to` field, that should be a relative path.
+  //
+  // Note:
+  //
+  // - Paths don't expand, i.e. ~ won't expand to the home directory and env vars won't work either.
+  // - Paths don't escape the target directory, so delete "../../../**/*" won't work.
+  suite "files" {
+    cp from=".template/*.toml" to="."
+    rm ".template/*.toml"
+    mv from=".template/**/*" to="."
+    rm ".template"
+  }
+
+  // Here we demonstrate how to inject prompts' values.
+  suite "install" {
+    // To disambiguate whether {R_PM} is part of a command or is a replacement that should be
+    // replaced with something, we pass `inject` node that explicitly tells arx what to inject
+    // into the string.
+    //
+    // All replacements are processed _before_ running a command.
+    run "{R_PM} install {R_PM_ARGS}" {
+      inject "R_PM" "R_PM_ARGS"
+    }
+  }
+
+  // Here we demonstrate multiline commands using `run`.
+  suite "commit" {
+    // Similarly to the `echo` action you can use raw strings to define multiline commands. Plus,
+    // you don't have to escape anything.
+    //
+    // The action below will be executed as if it were two separate `run` actions:
+    //
+    // run "git add ."
+    // run "git commit -m 'chore: init repository'"
+    //
+    // You can name `run` actions for clarity, otherwise it will use either the command itself or
+    // the first line of a multiline command as the hint.
+    run name="stage and commit" r#"
+      git add .
+      git commit -m 'chore: init repository'
+    "#
+  }
+}

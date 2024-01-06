@@ -1,99 +1,105 @@
-use std::fmt;
+use std::fs;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use clap::Parser;
 
-use crate::config::{self, Action};
+use crate::manifest::Manifest;
+use crate::path::PathUtils;
 use crate::repository::{Repository, RepositoryMeta};
-use crate::tar;
-use crate::{parser, processing};
-
-/// Newtype for app errors which get propagated across the app.
-#[derive(Debug)]
-pub struct AppError(pub String);
-
-impl fmt::Display for AppError {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{message}", message = self.0)
-  }
-}
+use crate::unpacker::Unpacker;
 
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
-pub struct App {
+pub struct Cli {
   /// Repository to download.
   #[clap(name = "target")]
-  target: String,
+  pub target: String,
 
   /// Directory to download to.
   #[clap(name = "path")]
-  path: Option<String>,
+  pub path: Option<String>,
 
-  /// Init git repository.
-  #[clap(short, long, display_order = 0)]
-  git: bool,
-
-  /// Remove imp config after download.
+  /// Delete arx config after download.
   #[clap(short, long, display_order = 1)]
-  remove: bool,
+  pub delete: bool,
 
-  /// Do not run actions defined in the repository.
-  #[clap(short, long, display_order = 2)]
-  ignore: bool,
-
-  /// Download at specific ref (branch, tag, commit).
+  /// Download using specified ref (branch, tag, commit).
   #[clap(short, long, display_order = 3)]
-  meta: Option<String>,
+  pub meta: Option<String>,
 }
 
-pub async fn run() -> Result<(), AppError> {
-  let options = App::parse();
+pub struct App;
 
-  // Parse repository information from the CLI argument.
-  let repository = parser::shortcut(&options.target)?;
-
-  // Now check if any specific meta (ref) was passed, if so, then use it; otherwise use parsed meta.
-  let meta = options.meta.map_or(repository.meta, RepositoryMeta);
-  let repository = Repository { meta, ..repository };
-
-  // Fetch the tarball as bytes (compressed).
-  let tarball = repository.fetch().await?;
-
-  // Get destination path.
-  let destination = options
-    .path
-    .map(PathBuf::from)
-    .unwrap_or_else(|| PathBuf::from(repository.repo));
-
-  // Decompress and unpack the tarball.
-  let unpacked = tar::unpack(&tarball, &destination)?;
-
-  // Read the kdl config.
-  let arx_config = config::resolve_arx_config(&destination)?;
-
-  // Get replacements and actions.
-  let replacements = config::get_replacements(&arx_config);
-  let actions = config::get_actions(&arx_config);
-
-  if let Some(items) = replacements {
-    processing::process_replacements(&unpacked, &items).await?;
+impl App {
+  pub fn new() -> Self {
+    Self
   }
 
-  if let Some(action) = actions {
-    match action {
-      | Action::Suite(suites) => {
-        let (resolved, unresolved) = config::resolve_requirements(&suites);
+  pub async fn run(&mut self) -> anyhow::Result<()> {
+    // Parse CLI options.
+    let options = Cli::parse();
 
-        println!("-- Action suites:");
-        println!("Resolved: {resolved:?}");
-        println!("Unresolved: {unresolved:?}");
+    // Parse repository information from the CLI argument.
+    let repository = Repository::from_str(&options.target)?;
+
+    // Check if any specific meta (ref) was passed, if so, then use it; otherwise use parsed meta.
+    let meta = options.meta.map_or(repository.meta(), RepositoryMeta);
+    let repository = repository.with_meta(meta);
+
+    // TODO: Check if destination already exists before downloading or performing local clone.
+
+    // Depending on the repository type, either download and unpack or make a local clone.
+    let destination = match repository {
+      | Repository::Remote(remote) => {
+        let name = options.path.unwrap_or(remote.repo.clone());
+        let destination = PathBuf::from(name);
+
+        // Fetch the tarball as bytes (compressed).
+        let tarball = remote.fetch().await?;
+
+        // Decompress and unpack the tarball.
+        let unpacker = Unpacker::new(tarball);
+        unpacker.unpack_to(&destination)?;
+
+        destination
       },
-      | Action::Single(actions) => {
-        println!("-- Actions:");
-        println!("Resolved: {actions:?}");
+      | Repository::Local(local) => {
+        // TODO: Check if source exists and valid.
+        let source = PathBuf::from(local.source.clone()).expand();
+
+        let destination = if let Some(destination) = options.path {
+          PathBuf::from(destination).expand()
+        } else {
+          source
+            .file_name()
+            .map(|name| name.into())
+            .unwrap_or_default()
+        };
+
+        // Copy the directory.
+        local.copy(&destination)?;
+        local.checkout(&destination)?;
+
+        // Delete inner .git.
+        let inner_git = destination.join(".git");
+
+        if inner_git.exists() {
+          println!("Removing {}", inner_git.display());
+          fs::remove_dir_all(inner_git)?;
+        }
+
+        // TODO: Check if source is a plain directory or git repo. If the latter, then we should
+        // also do a checkout.
+
+        destination
       },
-    }
+    };
+
+    // Now we need to read the manifest (if it is present).
+    let mut manifest = Manifest::with_options(&destination);
+    manifest.load()?;
+
+    Ok(())
   }
-
-  Ok(())
 }

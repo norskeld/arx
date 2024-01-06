@@ -42,34 +42,36 @@ actions {
   // Answers will be stored globally and available from any _subsequent_ action ar suite of actions.
   suite "prompts" {
     // Simple text prompt.
-    prompt "R_NAME" {
-      type "input"
+    prompt "input" {
+      name "R_NAME"
       hint "Repository name"
       default "norskeld/serpent"
     }
 
     // This will run user's $EDITOR.
-    prompt "R_DESC" {
-      type "editor"
+    prompt "editor" {
+      name "R_DESC"
       hint "Repository description"
     }
 
     // If you don't specify prompt `type`, it will default to "input".
-    prompt "R_AUTHOR" {
+    prompt {
+      name "R_AUTHOR"
       hint "Repository author"
       default "Vladislav M."
     }
 
     // Simple select prompt.
-    prompt "R_PM" {
-      type "select"
+    prompt "select" {
+      name "R_PM"
       hint "Package manager of choice"
       variants "npm" "pnpm" "yarn" "bun"
       default "npm"
     }
 
     // If you don't specify default value using `default` node it will be an empty string.
-    prompt "R_PM_ARGS" {
+    prompt {
+      name "R_PM_ARGS"
       hint "Additional arguments for package manager"
     }
   }

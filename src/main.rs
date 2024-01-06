@@ -1,6 +1,7 @@
-use arx::app::{self, AppError};
+use arx::app::App;
 
 #[tokio::main]
-async fn main() -> Result<(), AppError> {
-  app::run().await
+async fn main() -> anyhow::Result<()> {
+  let mut app = App::new();
+  app.run().await
 }

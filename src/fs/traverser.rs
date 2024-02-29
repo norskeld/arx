@@ -129,18 +129,18 @@ impl<'t> Iterator for TraverserIterator<'t> {
                 captured,
                 entry,
               }));
-            } else {
-              item = self.it.next()?;
-
-              continue 'skip;
             }
-          } else {
-            return Some(Ok(Match {
-              path: path.to_path_buf(),
-              captured: path.to_path_buf(),
-              entry,
-            }));
+
+            item = self.it.next()?;
+
+            continue 'skip;
           }
+
+          return Some(Ok(Match {
+            path: path.to_path_buf(),
+            captured: path.to_path_buf(),
+            entry,
+          }));
         },
         | Err(err) => return Some(Err(TraverseError::InvalidEntry(err))),
       }

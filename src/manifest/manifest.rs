@@ -262,7 +262,7 @@ impl Manifest {
         let nodes = children.nodes();
         let mut defaults = ManifestOptions::default();
 
-        for node in nodes.into_iter() {
+        for node in nodes {
           let name = node.name().to_string().to_ascii_lowercase();
 
           match name.as_str() {
@@ -290,7 +290,7 @@ impl Manifest {
   fn get_actions(&self, doc: &KdlDocument) -> Result<Actions, ManifestError> {
     #[inline]
     fn is_suite(node: &KdlNode) -> bool {
-      node.name().value().to_string() == "suite"
+      node.name().value() == "suite"
     }
 
     #[inline]
@@ -346,7 +346,7 @@ impl Manifest {
     let name = node.get_string(0).ok_or(ManifestError::ExpectedSuiteName)?;
 
     if let Some(children) = node.children() {
-      for children in children.nodes().into_iter() {
+      for children in children.nodes() {
         let action = self.get_action_single(children)?;
         actions.push(action);
       }
@@ -439,7 +439,7 @@ impl Manifest {
           .map(|children| {
             children
               .nodes()
-              .into_iter()
+              .iter()
               .map(|node| node.name().value().to_string())
               .collect::<Vec<_>>()
           })
@@ -529,9 +529,7 @@ impl Manifest {
           default: nodes.get("default").and_then(|node| node.get_bool(0)),
         })
       },
-      | kind => {
-        return Err(ManifestError::UnknownPrompt(kind.into()));
-      },
+      | kind => Err(ManifestError::UnknownPrompt(kind.into())),
     }
   }
 }

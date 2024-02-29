@@ -120,8 +120,8 @@ impl<'t> Iterator for TraverserIterator<'t> {
           if let Some(pattern) = &self.root_pattern {
             let candidate = path.display().to_string();
 
-            if let Some(captures) = glob_match_with_captures(&pattern, &candidate) {
-              let range = captures.get(0).cloned().unwrap_or_default();
+            if let Some(captures) = glob_match_with_captures(pattern, &candidate) {
+              let range = captures.first().cloned().unwrap_or_default();
               let captured = PathBuf::from(&candidate[range.start..]);
 
               return Some(Ok(Match {

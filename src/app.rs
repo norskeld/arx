@@ -66,7 +66,7 @@ impl App {
       },
       | Repository::Local(local) => {
         // TODO: Check if source exists and valid.
-        let source = PathBuf::from(local.source.clone()).expand();
+        let source = local.source.clone().expand();
 
         let destination = if let Some(destination) = options.path {
           PathBuf::from(destination).expand()
@@ -101,5 +101,11 @@ impl App {
     manifest.load()?;
 
     Ok(())
+  }
+}
+
+impl Default for App {
+  fn default() -> Self {
+    Self::new()
   }
 }

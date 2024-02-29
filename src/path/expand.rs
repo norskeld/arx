@@ -10,7 +10,7 @@ fn home() -> Option<String> {
 
 fn context(name: &str) -> Result<Option<String>, VarError> {
   match env::var(name) {
-    | Ok(value) => Ok(Some(value.into())),
+    | Ok(value) => Ok(Some(value)),
     | Err(VarError::NotPresent) => Ok(Some("".into())),
     | Err(err) => Err(err),
   }

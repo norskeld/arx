@@ -49,7 +49,7 @@ impl Unpacker {
       .map_err(|_| UnpackError::UnableGetEntries)?;
 
     // Create output structure (if necessary).
-    fs::create_dir_all(&path).map_err(|_| UnpackError::UnableCreateStructure)?;
+    fs::create_dir_all(path).map_err(|_| UnpackError::UnableCreateStructure)?;
 
     for mut entry in raw_entries.flatten() {
       let entry_path = entry.path().map_err(|_| UnpackError::UnableGetEntryPath)?;

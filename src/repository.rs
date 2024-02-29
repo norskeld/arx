@@ -243,7 +243,7 @@ impl LocalRepository {
     match reference {
       // Here `gref`` is an actual reference like branch or tag.
       | Some(gref) => {
-        let ref_name = gref.name().ok_or_else(|| CheckoutError::InvalidRefName)?;
+        let ref_name = gref.name().ok_or(CheckoutError::InvalidRefName)?;
 
         repository
           .set_head(ref_name)
@@ -321,7 +321,7 @@ impl FromStr for Repository {
       let input = input.trim();
 
       // Parse host if present or use default otherwise.
-      let (host, input) = if let Some((host, rest)) = input.split_once(":") {
+      let (host, input) = if let Some((host, rest)) = input.split_once(':') {
         match host.to_ascii_lowercase().as_str() {
           | "github" | "gh" => (RepositoryHost::GitHub, rest),
           | "gitlab" | "gl" => (RepositoryHost::GitLab, rest),
@@ -333,7 +333,7 @@ impl FromStr for Repository {
       };
 
       // Parse user name.
-      let (user, input) = if let Some((user, rest)) = input.split_once("/") {
+      let (user, input) = if let Some((user, rest)) = input.split_once('/') {
         if user.chars().all(is_valid_user) {
           (user.to_string(), rest)
         } else {
@@ -344,7 +344,7 @@ impl FromStr for Repository {
       };
 
       // Parse repository name.
-      let (repo, input) = if let Some((repo, rest)) = input.split_once("#") {
+      let (repo, input) = if let Some((repo, rest)) = input.split_once('#') {
         if repo.chars().all(is_valid_repo) {
           (repo.to_string(), Some(rest))
         } else {

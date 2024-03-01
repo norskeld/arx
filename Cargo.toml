@@ -16,11 +16,9 @@ flate2 = { version = "1.0.28" }
 git2 = { version = "0.18.1", features = ["vendored-libgit2"] }
 glob-match = { version = "0.2.1" }
 indoc = "2.0.4"
-itertools = { version = "0.12.0" }
 kdl = { version = "4.6.0" }
 reqwest = { version = "0.11.22", features = ["json"] }
 run_script = { version = "0.10.1" }
-shellexpand = { version = "3.1.0", features = ["full"] }
 tar = { version = "0.4.40" }
 thiserror = { version = "1.0.51" }
 tokio = { version = "1.35.0", features = ["macros", "fs", "rt-multi-thread"] }

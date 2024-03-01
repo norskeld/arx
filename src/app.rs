@@ -1,100 +1,132 @@
 use std::fs;
 use std::path::PathBuf;
-use std::str::FromStr;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 use crate::manifest::Manifest;
-use crate::path::PathUtils;
-use crate::repository::{Repository, RepositoryMeta};
+use crate::repository::{LocalRepository, RemoteRepository};
 use crate::unpacker::Unpacker;
 
 #[derive(Parser, Debug)]
-#[clap(version, about, long_about = None)]
+#[command(version, about, long_about = None)]
 pub struct Cli {
-  /// Repository to download.
-  #[clap(name = "target")]
-  pub target: String,
+  #[command(subcommand)]
+  pub command: BaseCommands,
 
-  /// Directory to download to.
-  #[clap(name = "path")]
-  pub path: Option<String>,
-
-  /// Delete arx config after download.
-  #[clap(short, long, display_order = 1)]
+  /// Delete arx config after scaffolding.
+  #[arg(short, long)]
   pub delete: bool,
-
-  /// Download using specified ref (branch, tag, commit).
-  #[clap(short, long, display_order = 3)]
-  pub meta: Option<String>,
 }
 
-pub struct App;
+#[derive(Debug, Subcommand)]
+pub enum BaseCommands {
+  /// Scaffold from a remote repository.
+  Remote {
+    /// Template repository to use for scaffolding.
+    src: String,
+
+    /// Directory to scaffold to.
+    path: Option<String>,
+
+    /// Scaffold from a specified ref (branch, tag, or commit).
+    #[arg(name = "REF", short = 'r', long = "ref")]
+    meta: Option<String>,
+  },
+  /// Scaffold from a local repository.
+  Local {
+    /// Template repository to use for scaffolding.
+    src: String,
+
+    /// Directory to scaffold to.
+    path: Option<String>,
+
+    /// Scaffold from a specified ref (branch, tag, or commit).
+    #[arg(name = "REF", short = 'r', long = "ref")]
+    meta: Option<String>,
+  },
+}
+
+impl BaseCommands {
+  pub fn path(&self) -> Option<PathBuf> {
+    match self {
+      | BaseCommands::Remote { path, .. } | BaseCommands::Local { path, .. } => {
+        path.as_ref().map(PathBuf::from)
+      },
+    }
+  }
+}
+
+#[derive(Debug)]
+pub struct App {
+  cli: Cli,
+}
 
 impl App {
   pub fn new() -> Self {
-    Self
+    Self { cli: Cli::parse() }
   }
 
-  pub async fn run(&mut self) -> anyhow::Result<()> {
-    // Parse CLI options.
-    let options = Cli::parse();
+  pub async fn run(self) -> anyhow::Result<()> {
+    // TODO: For `Remote` and `Local` variants check if destination already exists before
+    // downloading or performing local clone.
+    if let Some(path) = &self.cli.command.path() {
+      todo!("Check if destination {path:?} already exists");
+    }
 
-    // Parse repository information from the CLI argument.
-    let repository = Repository::from_str(&options.target)?;
+    match self.cli.command {
+      | BaseCommands::Remote { src, path, meta } => Self::remote(src, path, meta).await,
+      | BaseCommands::Local { src, path, meta } => Self::local(src, path, meta).await,
+    }
+  }
 
-    // Check if any specific meta (ref) was passed, if so, then use it; otherwise use parsed meta.
-    let meta = options.meta.map_or(repository.meta(), RepositoryMeta);
-    let repository = repository.with_meta(meta);
+  /// Preparation flow for remote repositories.
+  async fn remote(src: String, path: Option<String>, meta: Option<String>) -> anyhow::Result<()> {
+    // Parse repository.
+    let remote = RemoteRepository::new(src, meta)?;
 
-    // TODO: Check if destination already exists before downloading or performing local clone.
+    let name = path.unwrap_or(remote.repo.clone());
+    let destination = PathBuf::from(name);
 
-    // Depending on the repository type, either download and unpack or make a local clone.
-    let destination = match repository {
-      | Repository::Remote(remote) => {
-        let name = options.path.unwrap_or(remote.repo.clone());
-        let destination = PathBuf::from(name);
+    // Fetch the tarball as bytes (compressed).
+    let tarball = remote.fetch().await?;
 
-        // Fetch the tarball as bytes (compressed).
-        let tarball = remote.fetch().await?;
+    // Decompress and unpack the tarball.
+    let unpacker = Unpacker::new(tarball);
+    unpacker.unpack_to(&destination)?;
 
-        // Decompress and unpack the tarball.
-        let unpacker = Unpacker::new(tarball);
-        unpacker.unpack_to(&destination)?;
+    // Now we need to read the manifest (if it is present).
+    let mut manifest = Manifest::with_options(&destination);
+    manifest.load()?;
 
-        destination
-      },
-      | Repository::Local(local) => {
-        // TODO: Check if source exists and valid.
-        let source = local.source.clone().expand();
+    Ok(())
+  }
 
-        let destination = if let Some(destination) = options.path {
-          PathBuf::from(destination).expand()
-        } else {
-          source
-            .file_name()
-            .map(|name| name.into())
-            .unwrap_or_default()
-        };
+  /// Preparation flow for local repositories.
+  async fn local(src: String, path: Option<String>, meta: Option<String>) -> anyhow::Result<()> {
+    // Create repository.
+    let local = LocalRepository::new(src, meta);
 
-        // Copy the directory.
-        local.copy(&destination)?;
-        local.checkout(&destination)?;
-
-        // Delete inner .git.
-        let inner_git = destination.join(".git");
-
-        if inner_git.exists() {
-          println!("Removing {}", inner_git.display());
-          fs::remove_dir_all(inner_git)?;
-        }
-
-        // TODO: Check if source is a plain directory or git repo. If the latter, then we should
-        // also do a checkout.
-
-        destination
-      },
+    let destination = if let Some(destination) = path {
+      PathBuf::from(destination)
+    } else {
+      local
+        .source
+        .file_name()
+        .map(|name| name.into())
+        .unwrap_or_default()
     };
+
+    // Copy the directory.
+    local.copy(&destination)?;
+    local.checkout(&destination)?;
+
+    // Delete inner .git.
+    let inner_git = destination.join(".git");
+
+    if inner_git.exists() {
+      println!("Removing {}", inner_git.display());
+      fs::remove_dir_all(inner_git)?;
+    }
 
     // Now we need to read the manifest (if it is present).
     let mut manifest = Manifest::with_options(&destination);

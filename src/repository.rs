@@ -8,7 +8,6 @@ use git2::Repository as GitRepository;
 use thiserror::Error;
 
 use crate::fs::Traverser;
-use crate::path::PathUtils;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ParseError {
@@ -104,12 +103,12 @@ pub struct RemoteRepository {
 }
 
 impl RemoteRepository {
-  /// Returns a list of valid host prefixes.
-  pub fn prefixes() -> Vec<String> {
-    vec!["github", "gh", "gitlab", "gl", "bitbucket", "bb"]
-      .into_iter()
-      .map(str::to_string)
-      .collect()
+  /// Creates new `RemoteRepository`.
+  pub fn new(target: String, meta: Option<String>) -> Result<Self, ParseError> {
+    let repo = Self::from_str(&target)?;
+    let meta = meta.map_or(repo.meta, RepositoryMeta);
+
+    Ok(Self { meta, ..repo })
   }
 
   /// Resolves a URL depending on the host and other repository fields.
@@ -160,6 +159,76 @@ impl RemoteRepository {
   }
 }
 
+impl FromStr for RemoteRepository {
+  type Err = ParseError;
+
+  /// Parses a `&str` into a `RemoteRepository`.
+  fn from_str(input: &str) -> Result<Self, Self::Err> {
+    #[inline(always)]
+    fn is_valid_user(ch: char) -> bool {
+      ch.is_ascii_alphanumeric() || ch == '_' || ch == '-'
+    }
+
+    #[inline(always)]
+    fn is_valid_repo(ch: char) -> bool {
+      is_valid_user(ch) || ch == '.'
+    }
+
+    // TODO: Handle an edge case with multuple slashes in the repository name.
+
+    let input = input.trim();
+
+    // Parse host if present or use default otherwise.
+    let (host, input) = if let Some((host, rest)) = input.split_once(':') {
+      match host.to_ascii_lowercase().as_str() {
+        | "github" | "gh" => (RepositoryHost::GitHub, rest),
+        | "gitlab" | "gl" => (RepositoryHost::GitLab, rest),
+        | "bitbucket" | "bb" => (RepositoryHost::BitBucket, rest),
+        | _ => return Err(ParseError::InvalidHost),
+      }
+    } else {
+      (RepositoryHost::default(), input)
+    };
+
+    // Parse user name.
+    let (user, input) = if let Some((user, rest)) = input.split_once('/') {
+      if user.chars().all(is_valid_user) {
+        (user.to_string(), rest)
+      } else {
+        return Err(ParseError::InvalidUserName);
+      }
+    } else {
+      return Err(ParseError::MissingRepositoryName);
+    };
+
+    // Parse repository name.
+    let (repo, input) = if let Some((repo, rest)) = input.split_once('#') {
+      if repo.chars().all(is_valid_repo) {
+        (repo.to_string(), Some(rest))
+      } else {
+        return Err(ParseError::InvalidRepositoryName);
+      }
+    } else {
+      (input.to_string(), None)
+    };
+
+    // Produce meta if anything left from the input. Empty meta is accepted but ignored, default
+    // value is used then.
+    let meta = input
+      .filter(|input| !input.is_empty())
+      .map_or(RepositoryMeta::default(), |input| {
+        RepositoryMeta(input.to_string())
+      });
+
+    Ok(RemoteRepository {
+      host,
+      user,
+      repo,
+      meta,
+    })
+  }
+}
+
 /// Represents a local repository. Repositories of this kind don't need to be downloaded, we can
 /// simply clone them locally and switch to desired meta (ref).
 #[derive(Debug, PartialEq)]
@@ -169,16 +238,17 @@ pub struct LocalRepository {
 }
 
 impl LocalRepository {
-  /// Returns a list of valid prefixes that can be used to identify local repositories.
-  pub fn prefixes() -> [&'static str; 2] {
-    ["file", "local"]
+  /// Creates new `LocalRepository`.
+  pub fn new(source: String, meta: Option<String>) -> Self {
+    Self {
+      source: PathBuf::from(source),
+      meta: meta.map_or(RepositoryMeta::default(), RepositoryMeta),
+    }
   }
 
   /// Copies the repository into the `destination` directory.
   pub fn copy(&self, destination: &Path) -> Result<(), CopyError> {
-    let root = self.source.expand();
-
-    let traverser = Traverser::new(root)
+    let traverser = Traverser::new(self.source.to_owned())
       .pattern("**/*")
       .ignore_dirs(true)
       .contents_first(true);
@@ -263,115 +333,6 @@ impl LocalRepository {
   }
 }
 
-/// Wrapper around `RemoteRepository` and `LocalRepository`.
-#[derive(Debug, PartialEq)]
-pub enum Repository {
-  Remote(RemoteRepository),
-  Local(LocalRepository),
-}
-
-impl Repository {
-  /// Returns a new `Repository` with the given `meta`.
-  pub fn with_meta(self, meta: RepositoryMeta) -> Self {
-    match self {
-      | Self::Remote(remote) => Self::Remote(RemoteRepository { meta, ..remote }),
-      | Self::Local(local) => Self::Local(LocalRepository { meta, ..local }),
-    }
-  }
-
-  /// Returns a copy of the `Repository`'s `meta`.
-  pub fn meta(&self) -> RepositoryMeta {
-    match self {
-      | Self::Remote(remote) => remote.meta.clone(),
-      | Self::Local(local) => local.meta.clone(),
-    }
-  }
-}
-
-impl FromStr for Repository {
-  type Err = ParseError;
-
-  /// Parses a `&str` into a `Repository`.
-  fn from_str(input: &str) -> Result<Self, Self::Err> {
-    #[inline(always)]
-    fn is_valid_user(ch: char) -> bool {
-      ch.is_ascii_alphanumeric() || ch == '_' || ch == '-'
-    }
-
-    #[inline(always)]
-    fn is_valid_repo(ch: char) -> bool {
-      is_valid_user(ch) || ch == '.'
-    }
-
-    // Try to find and remove a local repository prefix. If we get Some(..), we are facing a local
-    // repository, otherwise a remote one.
-    let unprefix = LocalRepository::prefixes()
-      .into_iter()
-      .map(|prefix| format!("{prefix}:"))
-      .find_map(|prefix| input.strip_prefix(&prefix));
-
-    if let Some(input) = unprefix {
-      Ok(Repository::Local(LocalRepository {
-        source: PathBuf::from(input),
-        meta: RepositoryMeta::default(),
-      }))
-    } else {
-      // TODO: Handle an edge case with multuple slashes in the repository name.
-
-      let input = input.trim();
-
-      // Parse host if present or use default otherwise.
-      let (host, input) = if let Some((host, rest)) = input.split_once(':') {
-        match host.to_ascii_lowercase().as_str() {
-          | "github" | "gh" => (RepositoryHost::GitHub, rest),
-          | "gitlab" | "gl" => (RepositoryHost::GitLab, rest),
-          | "bitbucket" | "bb" => (RepositoryHost::BitBucket, rest),
-          | _ => return Err(ParseError::InvalidHost),
-        }
-      } else {
-        (RepositoryHost::default(), input)
-      };
-
-      // Parse user name.
-      let (user, input) = if let Some((user, rest)) = input.split_once('/') {
-        if user.chars().all(is_valid_user) {
-          (user.to_string(), rest)
-        } else {
-          return Err(ParseError::InvalidUserName);
-        }
-      } else {
-        return Err(ParseError::MissingRepositoryName);
-      };
-
-      // Parse repository name.
-      let (repo, input) = if let Some((repo, rest)) = input.split_once('#') {
-        if repo.chars().all(is_valid_repo) {
-          (repo.to_string(), Some(rest))
-        } else {
-          return Err(ParseError::InvalidRepositoryName);
-        }
-      } else {
-        (input.to_string(), None)
-      };
-
-      // Produce meta if anything left from the input. Empty meta is accepted but ignored, default
-      // value is used then.
-      let meta = input
-        .filter(|input| !input.is_empty())
-        .map_or(RepositoryMeta::default(), |input| {
-          RepositoryMeta(input.to_string())
-        });
-
-      Ok(Repository::Remote(RemoteRepository {
-        host,
-        user,
-        repo,
-        meta,
-      }))
-    }
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -379,20 +340,20 @@ mod tests {
   #[test]
   fn parse_remote_default() {
     assert_eq!(
-      Repository::from_str("foo/bar"),
-      Ok(Repository::Remote(RemoteRepository {
+      RemoteRepository::from_str("foo/bar"),
+      Ok(RemoteRepository {
         host: RepositoryHost::GitHub,
         user: "foo".to_string(),
         repo: "bar".to_string(),
         meta: RepositoryMeta::default()
-      }))
+      })
     );
   }
 
   #[test]
   fn parse_remote_invalid_userrepo() {
     assert_eq!(
-      Repository::from_str("foo-bar"),
+      RemoteRepository::from_str("foo-bar"),
       Err(ParseError::MissingRepositoryName)
     );
   }
@@ -400,7 +361,7 @@ mod tests {
   #[test]
   fn parse_remote_invalid_host() {
     assert_eq!(
-      Repository::from_str("srht:foo/bar"),
+      RemoteRepository::from_str("srht:foo/bar"),
       Err(ParseError::InvalidHost)
     );
   }
@@ -419,13 +380,13 @@ mod tests {
 
     for (input, meta) in cases {
       assert_eq!(
-        Repository::from_str(input),
-        Ok(Repository::Remote(RemoteRepository {
+        RemoteRepository::from_str(input),
+        Ok(RemoteRepository {
           host: RepositoryHost::GitHub,
           user: "foo".to_string(),
           repo: "bar".to_string(),
           meta
-        }))
+        })
       );
     }
   }
@@ -443,13 +404,13 @@ mod tests {
 
     for (input, host) in cases {
       assert_eq!(
-        Repository::from_str(input),
-        Ok(Repository::Remote(RemoteRepository {
+        RemoteRepository::from_str(input),
+        Ok(RemoteRepository {
           host,
           user: "foo".to_string(),
           repo: "bar".to_string(),
           meta: RepositoryMeta::default()
-        }))
+        })
       );
     }
   }
@@ -457,13 +418,13 @@ mod tests {
   #[test]
   fn test_remote_empty_meta() {
     assert_eq!(
-      Repository::from_str("foo/bar#"),
-      Ok(Repository::Remote(RemoteRepository {
+      RemoteRepository::from_str("foo/bar#"),
+      Ok(RemoteRepository {
         host: RepositoryHost::GitHub,
         user: "foo".to_string(),
         repo: "bar".to_string(),
         meta: RepositoryMeta::default()
-      }))
+      })
     );
   }
 
@@ -480,25 +441,14 @@ mod tests {
 
     for (input, user, repo) in cases {
       assert_eq!(
-        Repository::from_str(input),
-        Ok(Repository::Remote(RemoteRepository {
+        RemoteRepository::from_str(input),
+        Ok(RemoteRepository {
           host: RepositoryHost::default(),
           user: user.to_string(),
           repo: repo.to_string(),
           meta: RepositoryMeta::default()
-        }))
+        })
       );
     }
-  }
-
-  #[test]
-  fn parse_local() {
-    assert_eq!(
-      Repository::from_str("file:~/dev/templates"),
-      Ok(Repository::Local(LocalRepository {
-        source: PathBuf::from("~/dev/templates"),
-        meta: RepositoryMeta::default()
-      }))
-    );
   }
 }

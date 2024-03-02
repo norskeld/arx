@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use kdl::{KdlDocument, KdlNode};
 use thiserror::Error;
 
+use crate::manifest::actions::*;
+use crate::manifest::prompts::*;
 use crate::manifest::KdlUtils;
 
 const MANIFEST_NAME: &str = "arx.kdl";
@@ -52,9 +54,9 @@ impl Default for ManifestOptions {
   }
 }
 
-/// Represents a manifest actions set that can be either an [ActionSuite] *or* an [ActionSingle].
+/// Represents a manifest actions set that can be a vec of [ActionSuite] *or* [ActionSingle].
 ///
-/// Actions should be defined either like this:
+/// So, actions should be defined either like this:
 ///
 /// ```kdl
 /// actions {
@@ -76,7 +78,7 @@ impl Default for ManifestOptions {
 #[derive(Debug)]
 pub enum Actions {
   Suite(Vec<ActionSuite>),
-  Single(Vec<ActionSingle>),
+  Flat(Vec<ActionSingle>),
   Empty,
 }
 
@@ -85,7 +87,7 @@ pub enum Actions {
 pub struct ActionSuite {
   /// Suite name.
   pub name: String,
-  /// Suite actions to run (synchronously).
+  /// Suite actions to run.
   pub actions: Vec<ActionSingle>,
 }
 
@@ -93,119 +95,33 @@ pub struct ActionSuite {
 #[derive(Debug)]
 pub enum ActionSingle {
   /// Copies a file or directory. Glob-friendly. Overwrites by default.
-  Copy {
-    /// Source(s) to copy.
-    from: PathBuf,
-    /// Where to copy to.
-    to: PathBuf,
-    /// Whether to overwrite or not.
-    overwrite: bool,
-  },
+  Copy(Copy),
   /// Moves a file or directory. Glob-friendly. Overwrites by default.
-  Move {
-    /// Source(s) to move.
-    from: PathBuf,
-    /// Where to move to.
-    to: PathBuf,
-    /// Whether to overwrite or not.
-    overwrite: bool,
-  },
+  Move(Move),
   /// Deletes a file or directory. Glob-friendly.
-  Delete {
-    /// Target to delete.
-    target: PathBuf,
-  },
-  /// Simply outputs a message.
-  Echo {
-    /// Message to output.
-    message: String,
-    /// Whether to trim multiline message or not.
-    trim: bool,
-  },
+  Delete(Delete),
+  /// Echoes a message to stdout.
+  Echo(Echo),
   /// Runs an arbitrary command in the shell.
-  Run {
-    /// Command name. Optional, defaults either to the command itself or to the first line of
-    /// the multiline command.
-    name: Option<String>,
-    /// Comannd to run in the shell.
-    command: String,
-    /// An optional list of replacements to be injected into the command. Consider the following
-    /// example:
-    ///
-    /// We use inject to disambiguate whether `{R_PM}` is part of a command or is a replacement
-    /// that should be replaced with something, we pass `inject` node that explicitly tells arx
-    /// what to inject into the string.
-    ///
-    /// ```kdl
-    /// run "{R_PM} install {R_PM_ARGS}" {
-    ///   inject "R_PM" "R_PM_ARGS"
-    /// }
-    /// ```
-    ///
-    /// All replacements are processed _before_ running a command.
-    inject: Option<Vec<String>>,
-  },
+  Run(Run),
   /// Executes a prompt asking a declaratively defined "question".
   Prompt(Prompt),
   /// Execute given replacements using values provided by prompts. Optionally, only apply
   /// replacements to files matching the provided glob.
-  Replace {
-    /// Replacements to apply.
-    replacements: Vec<String>,
-    /// Optional glob to limit files to apply replacements to.
-    glob: Option<PathBuf>,
-  },
+  Replace(Replace),
   /// Fallback action for pattern matching ergonomics and reporting purposes.
-  Unknown { name: String },
-}
-
-#[derive(Debug)]
-pub enum Prompt {
-  Input {
-    /// Name of the variable that will store the answer.
-    name: String,
-    /// Short description.
-    hint: String,
-    /// Default value if input is empty.
-    default: Option<String>,
-  },
-  Select {
-    /// Name of the variable that will store the answer.
-    name: String,
-    /// Short description.
-    hint: String,
-    /// List of options.
-    options: Vec<String>,
-    /// Default value. If none or invalid option is provided, the first one is selected.
-    default: Option<String>,
-  },
-  Confirm {
-    /// Name of the variable that will store the answer.
-    name: String,
-    /// Short description of the prompt.
-    hint: String,
-    /// Default value.
-    default: Option<bool>,
-  },
-  Editor {
-    /// Name of the variable that will store the answer.
-    name: String,
-    /// Short description.
-    hint: String,
-    /// Default value if input is empty.
-    default: Option<String>,
-  },
+  Unknown(Unknown),
 }
 
 /// Arx manifest (config).
 #[derive(Debug)]
 pub struct Manifest {
   /// Manifest directory.
-  root: PathBuf,
+  pub root: PathBuf,
   /// Manifest options.
-  options: ManifestOptions,
+  pub options: ManifestOptions,
   /// Actions.
-  actions: Actions,
+  pub actions: Actions,
 }
 
 impl Manifest {
@@ -254,6 +170,7 @@ impl Manifest {
     Ok(document)
   }
 
+  /// Tries to parse options from the manifest.
   fn get_options(&self, doc: &KdlDocument) -> Result<ManifestOptions, ManifestError> {
     let options = doc
       .get("options")
@@ -287,6 +204,7 @@ impl Manifest {
     }
   }
 
+  /// Tries to parse actions from the manifest.
   fn get_actions(&self, doc: &KdlDocument) -> Result<Actions, ManifestError> {
     #[inline]
     fn is_suite(node: &KdlNode) -> bool {
@@ -294,7 +212,7 @@ impl Manifest {
     }
 
     #[inline]
-    fn is_not_suite(node: &KdlNode) -> bool {
+    fn is_flat(node: &KdlNode) -> bool {
       !is_suite(node)
     }
 
@@ -316,7 +234,7 @@ impl Manifest {
           Ok(Actions::Suite(suites))
         }
         // Check if all nodes are single actions.
-        else if nodes.iter().all(is_not_suite) {
+        else if nodes.iter().all(is_flat) {
           let mut actions = Vec::new();
 
           for node in nodes.iter() {
@@ -324,7 +242,7 @@ impl Manifest {
             actions.push(action);
           }
 
-          Ok(Actions::Single(actions))
+          Ok(Actions::Flat(actions))
         }
         // Otherwise we have invalid actions block.
         else {
@@ -362,42 +280,34 @@ impl Manifest {
       // Actions for manipulating files and directories.
       | "cp" => {
         let from = node
-          .get_pathbuf("from")
+          .get_string("from")
           .ok_or(ManifestError::ExpectedAttribute("from".into()))?;
 
         let to = node
-          .get_pathbuf("to")
+          .get_string("to")
           .ok_or(ManifestError::ExpectedAttribute("to".into()))?;
 
         let overwrite = node.get_bool("overwrite").unwrap_or(true);
 
-        ActionSingle::Copy {
-          from,
-          to,
-          overwrite,
-        }
+        ActionSingle::Copy(Copy { from, to, overwrite })
       },
       | "mv" => {
         let from = node
-          .get_pathbuf("from")
+          .get_string("from")
           .ok_or(ManifestError::ExpectedAttribute("from".into()))?;
 
         let to = node
-          .get_pathbuf("to")
+          .get_string("to")
           .ok_or(ManifestError::ExpectedAttribute("to".into()))?;
 
         let overwrite = node.get_bool("overwrite").unwrap_or(true);
 
-        ActionSingle::Move {
-          from,
-          to,
-          overwrite,
-        }
+        ActionSingle::Move(Move { from, to, overwrite })
       },
       | "rm" => {
-        ActionSingle::Delete {
-          target: node.get_pathbuf(0).ok_or(ManifestError::ExpectedArgument)?,
-        }
+        let target = node.get_string(0).ok_or(ManifestError::ExpectedArgument)?;
+
+        ActionSingle::Delete(Delete { target })
       },
       // Running commands and echoing output.
       | "echo" => {
@@ -405,15 +315,7 @@ impl Manifest {
           .get_string(0)
           .ok_or(ManifestError::ExpectedAttribute("message".into()))?;
 
-        let trim = node.get_bool("trim").unwrap_or(false);
-
-        ActionSingle::Echo { message, trim }
-      },
-      | "run" => {
-        let name = node.get_string("name");
-        let command = node.get_string(0).ok_or(ManifestError::ExpectedArgument)?;
-
-        let inject = node.children().map(|children| {
+        let injects = node.children().map(|children| {
           children
             .get_args("inject")
             .into_iter()
@@ -421,11 +323,23 @@ impl Manifest {
             .collect()
         });
 
-        ActionSingle::Run {
-          name,
-          command,
-          inject,
-        }
+        let trim = node.get_bool("trim").unwrap_or(true);
+
+        ActionSingle::Echo(Echo { message, injects, trim })
+      },
+      | "run" => {
+        let name = node.get_string("name");
+        let command = node.get_string(0).ok_or(ManifestError::ExpectedArgument)?;
+
+        let injects = node.children().map(|children| {
+          children
+            .get_args("inject")
+            .into_iter()
+            .filter_map(|arg| arg.as_string().map(str::to_string))
+            .collect()
+        });
+
+        ActionSingle::Run(Run { name, command, injects })
       },
       // Prompts and replacements.
       | "prompt" => {
@@ -441,18 +355,16 @@ impl Manifest {
               .nodes()
               .iter()
               .map(|node| node.name().value().to_string())
-              .collect::<Vec<_>>()
+              .collect()
           })
           .unwrap_or_default();
 
-        let glob = node.get_string("in").map(PathBuf::from);
+        let glob = node.get_string("in");
 
-        ActionSingle::Replace { replacements, glob }
+        ActionSingle::Replace(Replace { replacements, glob })
       },
       // Fallback.
-      | action => {
-        return Err(ManifestError::UnknownNode(action.into()));
-      },
+      | action => ActionSingle::Unknown(Unknown { name: action.into() }),
     };
 
     Ok(action)
@@ -482,9 +394,9 @@ impl Manifest {
     }
 
     #[inline]
-    fn variants(nodes: &KdlDocument) -> Vec<String> {
+    fn options(nodes: &KdlDocument) -> Vec<String> {
       nodes
-        .get_args("variants")
+        .get_args("options")
         .into_iter()
         .filter_map(|arg| arg.as_string().map(str::to_string))
         .collect()
@@ -494,40 +406,44 @@ impl Manifest {
     match kind.as_str() {
       | "input" => {
         let nodes = node.children().ok_or(ManifestError::ExpectedInputNodes)?;
+        let default = nodes.get("default").and_then(|node| node.get_string(0));
 
-        Ok(Prompt::Input {
+        Ok(Prompt::Input(Input {
           name: name(nodes)?,
           hint: hint(nodes)?,
-          default: nodes.get("default").and_then(|node| node.get_string(0)),
-        })
+          default,
+        }))
       },
       | "editor" => {
         let nodes = node.children().ok_or(ManifestError::ExpectedEditorNodes)?;
+        let default = nodes.get("default").and_then(|node| node.get_string(0));
 
-        Ok(Prompt::Editor {
+        Ok(Prompt::Editor(Editor {
           name: name(nodes)?,
           hint: hint(nodes)?,
-          default: nodes.get("default").and_then(|node| node.get_string(0)),
-        })
+          default,
+        }))
       },
       | "select" => {
         let nodes = node.children().ok_or(ManifestError::ExpectedSelectNodes)?;
+        let default = nodes.get("default").and_then(|node| node.get_string(0));
 
-        Ok(Prompt::Select {
+        Ok(Prompt::Select(Select {
           name: name(nodes)?,
           hint: hint(nodes)?,
-          options: variants(nodes),
-          default: nodes.get("default").and_then(|node| node.get_string(0)),
-        })
+          options: options(nodes),
+          default,
+        }))
       },
       | "confirm" => {
         let nodes = node.children().ok_or(ManifestError::ExpectedConfirmNodes)?;
+        let default = nodes.get("default").and_then(|node| node.get_bool(0));
 
-        Ok(Prompt::Confirm {
+        Ok(Prompt::Confirm(Confirm {
           name: name(nodes)?,
           hint: hint(nodes)?,
-          default: nodes.get("default").and_then(|node| node.get_bool(0)),
-        })
+          default,
+        }))
       },
       | kind => Err(ManifestError::UnknownPrompt(kind.into())),
     }

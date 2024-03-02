@@ -81,11 +81,7 @@ impl Traverser {
       .as_ref()
       .map(|pat| self.options.root.join(pat).display().to_string());
 
-    TraverserIterator {
-      it,
-      root_pattern,
-      options: &self.options,
-    }
+    TraverserIterator { it, root_pattern, options: &self.options }
   }
 }
 

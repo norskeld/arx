@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+use crate::actions::Executor;
 use crate::manifest::Manifest;
 use crate::repository::{LocalRepository, RemoteRepository};
 use crate::unpacker::Unpacker;
@@ -73,14 +74,25 @@ impl App {
       todo!("Check if destination {path:?} already exists");
     }
 
-    match self.cli.command {
-      | BaseCommands::Remote { src, path, meta } => Self::remote(src, path, meta).await,
-      | BaseCommands::Local { src, path, meta } => Self::local(src, path, meta).await,
-    }
+    // Load the manifest.
+    let manifest = match self.cli.command {
+      | BaseCommands::Remote { src, path, meta } => Self::remote(src, path, meta).await?,
+      | BaseCommands::Local { src, path, meta } => Self::local(src, path, meta).await?,
+    };
+
+    // Create executor and kick off execution.
+    let executor = Executor::new(manifest);
+    executor.execute().await?;
+
+    Ok(())
   }
 
   /// Preparation flow for remote repositories.
-  async fn remote(src: String, path: Option<String>, meta: Option<String>) -> anyhow::Result<()> {
+  async fn remote(
+    src: String,
+    path: Option<String>,
+    meta: Option<String>,
+  ) -> anyhow::Result<Manifest> {
     // Parse repository.
     let remote = RemoteRepository::new(src, meta)?;
 
@@ -98,11 +110,15 @@ impl App {
     let mut manifest = Manifest::with_options(&destination);
     manifest.load()?;
 
-    Ok(())
+    Ok(manifest)
   }
 
   /// Preparation flow for local repositories.
-  async fn local(src: String, path: Option<String>, meta: Option<String>) -> anyhow::Result<()> {
+  async fn local(
+    src: String,
+    path: Option<String>,
+    meta: Option<String>,
+  ) -> anyhow::Result<Manifest> {
     // Create repository.
     let local = LocalRepository::new(src, meta);
 
@@ -132,7 +148,7 @@ impl App {
     let mut manifest = Manifest::with_options(&destination);
     manifest.load()?;
 
-    Ok(())
+    Ok(manifest)
   }
 }
 

@@ -23,7 +23,7 @@ impl Executor {
       | Actions::Empty => return Ok(println!("No actions found.")),
     };
 
-    Ok(executor?)
+    executor
   }
 
   async fn execute_suite(&self, suites: &[ActionSuite]) -> anyhow::Result<()> {
@@ -73,6 +73,6 @@ impl Executor {
       | ActionSingle::Unknown(action) => action.execute().await,
     };
 
-    Ok(executor?)
+    executor
   }
 }

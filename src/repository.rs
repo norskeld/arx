@@ -113,12 +113,7 @@ impl RemoteRepository {
 
   /// Resolves a URL depending on the host and other repository fields.
   pub fn get_tar_url(&self) -> String {
-    let RemoteRepository {
-      host,
-      user,
-      repo,
-      meta,
-    } = self;
+    let RemoteRepository { host, user, repo, meta } = self;
 
     let RepositoryMeta(meta) = meta;
 
@@ -220,12 +215,7 @@ impl FromStr for RemoteRepository {
         RepositoryMeta(input.to_string())
       });
 
-    Ok(RemoteRepository {
-      host,
-      user,
-      repo,
-      meta,
-    })
+    Ok(RemoteRepository { host, user, repo, meta })
   }
 }
 

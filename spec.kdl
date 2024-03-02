@@ -1,7 +1,7 @@
 // Options defined here can be overridden from CLI.
 options {
-  // Remove arx.kdl after it's done. Defaults to `true`.
-  remove false
+  // Delete arx.kdl after it's done. Defaults to `true`.
+  delete false
 }
 
 // Actions to run after the repository was successfully downloaded and unpacked. All actions or
@@ -16,12 +16,12 @@ options {
 // - Unpacking into an existing destination is forbidden.
 // - Invalid or unknown actions, nodes or replacements will be skipped. Warnings will be issued.
 // - Action failure terminates the main process.
-// - No cleanup on failures whatsoever.
+// - No cleanup on failures by default.
 actions {
   suite "hello" {
     // This action simply echoes the argument into stdout. Raw strings are trimmed and aligned to
     // the leftmost non-whitespace character.
-    echo r#"
+    echo trim=true r#"
       Sup! Let's set everything up. We will:
 
       - Print this message.

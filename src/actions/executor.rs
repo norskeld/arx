@@ -17,13 +17,11 @@ impl Executor {
   }
 
   pub async fn execute(&self) -> anyhow::Result<()> {
-    let executor = match &self.manifest.actions {
+    match &self.manifest.actions {
       | Actions::Suite(suites) => self.execute_suite(suites).await,
       | Actions::Flat(actions) => self.execute_flat(actions).await,
       | Actions::Empty => return Ok(println!("No actions found.")),
-    };
-
-    executor
+    }
   }
 
   async fn execute_suite(&self, suites: &[ActionSuite]) -> anyhow::Result<()> {
@@ -62,17 +60,15 @@ impl Executor {
     action: &ActionSingle,
     replacements: &mut Replacements,
   ) -> anyhow::Result<()> {
-    let executor = match action {
+    match action {
       | ActionSingle::Copy(action) => action.execute().await,
       | ActionSingle::Move(action) => action.execute().await,
       | ActionSingle::Delete(action) => action.execute().await,
-      | ActionSingle::Echo(action) => action.execute(&replacements).await,
-      | ActionSingle::Run(action) => action.execute(&replacements).await,
+      | ActionSingle::Echo(action) => action.execute(replacements).await,
+      | ActionSingle::Run(action) => action.execute(replacements).await,
       | ActionSingle::Prompt(action) => action.execute(replacements).await,
-      | ActionSingle::Replace(action) => action.execute(&replacements).await,
+      | ActionSingle::Replace(action) => action.execute(replacements).await,
       | ActionSingle::Unknown(action) => action.execute().await,
-    };
-
-    executor
+    }
   }
 }

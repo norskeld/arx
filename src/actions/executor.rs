@@ -20,7 +20,7 @@ impl Executor {
     match &self.manifest.actions {
       | Actions::Suite(suites) => self.execute_suite(suites).await,
       | Actions::Flat(actions) => self.execute_flat(actions).await,
-      | Actions::Empty => return Ok(println!("No actions found.")),
+      | Actions::Empty => Ok(println!("No actions found.")),
     }
   }
 

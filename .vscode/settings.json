@@ -2,6 +2,9 @@
   "editor.rulers": [100],
   "editor.formatOnSave": true,
   "editor.inlayHints.enabled": "offUnlessPressed",
+  "editor.quickSuggestions": {
+    "strings": "on"
+  },
   "rust-analyzer.rustfmt.extraArgs": ["+nightly"],
   "rust-analyzer.diagnostics.disabled": ["macro-error"],
   "rust-analyzer.lens.enable": true

@@ -27,7 +27,7 @@ impl Executor {
   async fn execute_suite(&self, suites: &[ActionSuite]) -> anyhow::Result<()> {
     let mut replacements = HashMap::<String, String>::new();
 
-    for ActionSuite { name, actions, .. } in suites.iter() {
+    for ActionSuite { name, actions, .. } in suites {
       println!(
         "{symbol} {title}: {name}\n",
         symbol = style("◆").blue().bold(),
@@ -35,7 +35,7 @@ impl Executor {
         name = style(name).green()
       );
 
-      for action in actions.iter() {
+      for action in actions {
         self.execute_single(action, &mut replacements).await?;
         println!();
       }
@@ -45,10 +45,10 @@ impl Executor {
   }
 
   async fn execute_flat(&self, actions: &[ActionSingle]) -> anyhow::Result<()> {
-    let mut injects = HashMap::<String, String>::new();
+    let mut replacements = HashMap::<String, String>::new();
 
-    for action in actions.iter() {
-      self.execute_single(action, &mut injects).await?;
+    for action in actions {
+      self.execute_single(action, &mut replacements).await?;
       println!();
     }
 

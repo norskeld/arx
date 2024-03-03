@@ -74,6 +74,13 @@ actions {
       name "R_PM_ARGS"
       hint "Additional arguments for package manager"
     }
+
+    // Simple confirm prompt.
+    prompt "confirm" {
+      name "R_COMMIT"
+      hint "Whether to stage and commit changes after scaffolding"
+      default false
+    }
   }
 
   // Here we demonstrate using replacements.

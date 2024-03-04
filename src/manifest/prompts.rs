@@ -16,8 +16,6 @@ pub struct Select {
   pub hint: String,
   /// List of options.
   pub options: Vec<String>,
-  /// Default value. If none or invalid option is provided, the first one is selected.
-  pub default: Option<String>,
 }
 
 #[derive(Debug)]

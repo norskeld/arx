@@ -1,6 +1,6 @@
 use unindent::Unindent;
 
-use crate::actions::Replacements;
+use crate::actions::{State, Value};
 use crate::manifest::actions::*;
 
 impl Copy {
@@ -22,7 +22,7 @@ impl Delete {
 }
 
 impl Echo {
-  pub async fn execute(&self, replacements: &Replacements) -> anyhow::Result<()> {
+  pub async fn execute(&self, state: &State) -> anyhow::Result<()> {
     let message = if self.trim {
       self.message.trim()
     } else {
@@ -33,7 +33,7 @@ impl Echo {
 
     if let Some(injects) = &self.injects {
       for inject in injects {
-        if let Some(value) = replacements.get(inject) {
+        if let Some(Value::String(value)) = state.values.get(inject) {
           message = message.replace(&format!("{{{inject}}}"), value);
         }
       }
@@ -44,20 +44,24 @@ impl Echo {
 }
 
 impl Run {
-  pub async fn execute(&self, _replacements: &Replacements) -> anyhow::Result<()> {
+  pub async fn execute(&self, _state: &State) -> anyhow::Result<()> {
     Ok(println!("run action"))
   }
 }
 
 impl Prompt {
-  // TODO: This will require mutable reference to `Executor` or `prompts`.
-  pub async fn execute(&self, _replacements: &mut Replacements) -> anyhow::Result<()> {
-    Ok(println!("prompt action"))
+  pub async fn execute(&self, state: &mut State) -> anyhow::Result<()> {
+    match self {
+      | Self::Confirm(prompt) => prompt.execute(state).await,
+      | Self::Input(prompt) => prompt.execute(state).await,
+      | Self::Select(prompt) => prompt.execute(state).await,
+      | Self::Editor(prompt) => prompt.execute(state).await,
+    }
   }
 }
 
 impl Replace {
-  pub async fn execute(&self, _replacements: &Replacements) -> anyhow::Result<()> {
+  pub async fn execute(&self, _state: &State) -> anyhow::Result<()> {
     Ok(println!("replace action"))
   }
 }

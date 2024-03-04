@@ -1,9 +1,11 @@
 use std::fmt::Display;
+use std::process;
 
+use crossterm::style::Stylize;
 use inquire::formatter::StringFormatter;
 use inquire::required;
 use inquire::ui::{Color, RenderConfig, StyleSheet, Styled};
-use inquire::{Confirm, Editor, Select, Text};
+use inquire::{Confirm, Editor, InquireError, Select, Text};
 
 use crate::actions::{State, Value};
 use crate::manifest::prompts;
@@ -31,7 +33,7 @@ impl Inquirer {
   pub fn empty_formatter<'s>() -> StringFormatter<'s> {
     &|input| {
       if input.is_empty() {
-        "<empty>".to_string()
+        "<empty>".dark_grey().to_string()
       } else {
         input.to_string()
       }
@@ -49,6 +51,20 @@ impl Inquirer {
 
     (name, hint, help)
   }
+
+  /// Handle interruption/cancelation events.
+  pub fn handle_interruption(err: InquireError) {
+    match err {
+      | InquireError::OperationCanceled => {
+        process::exit(0);
+      },
+      | InquireError::OperationInterrupted => {
+        println!("{}", "<interrupted>".red());
+        process::exit(0);
+      },
+      | _ => {},
+    }
+  }
 }
 
 impl prompts::Confirm {
@@ -64,8 +80,9 @@ impl prompts::Confirm {
       prompt = prompt.with_default(default);
     }
 
-    if let Ok(value) = prompt.prompt() {
-      state.set(name, Value::Bool(value));
+    match prompt.prompt() {
+      | Ok(value) => state.set(name, Value::Bool(value)),
+      | Err(err) => Inquirer::handle_interruption(err),
     }
 
     Ok(())
@@ -88,8 +105,9 @@ impl prompts::Input {
       prompt = prompt.with_validator(required!("This field is required."));
     }
 
-    if let Ok(value) = prompt.prompt() {
-      state.set(name, Value::String(value));
+    match prompt.prompt() {
+      | Ok(value) => state.set(name, Value::String(value)),
+      | Err(err) => Inquirer::handle_interruption(err),
     }
 
     Ok(())
@@ -107,8 +125,9 @@ impl prompts::Select {
       .with_help_message(&help)
       .with_render_config(Inquirer::theme());
 
-    if let Ok(value) = prompt.prompt() {
-      state.set(name, Value::String(value));
+    match prompt.prompt() {
+      | Ok(value) => state.set(name, Value::String(value)),
+      | Err(err) => Inquirer::handle_interruption(err),
     }
 
     Ok(())
@@ -128,8 +147,9 @@ impl prompts::Editor {
       prompt = prompt.with_predefined_text(default);
     }
 
-    if let Ok(value) = prompt.prompt() {
-      state.set(name, Value::String(value));
+    match prompt.prompt() {
+      | Ok(value) => state.set(name, Value::String(value)),
+      | Err(err) => Inquirer::handle_interruption(err),
     }
 
     Ok(())

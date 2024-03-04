@@ -1,73 +1,115 @@
 use std::collections::HashMap;
 
-use console::style;
+use crossterm::style::Stylize;
 
 use crate::manifest::{ActionSingle, ActionSuite, Actions, Manifest};
 
-/// Alias for a map of string replacements.
-pub type Replacements = HashMap<String, String>;
+/// Replacement value.
+#[derive(Debug)]
+pub enum Value {
+  /// A string value.
+  String(String),
+  /// A boolean value.
+  Bool(bool),
+}
 
+#[derive(Debug)]
+pub struct State {
+  /// A map of replacements and associated values.
+  pub values: HashMap<String, Value>,
+}
+
+impl State {
+  /// Create a new state.
+  pub fn new() -> Self {
+    Self { values: HashMap::new() }
+  }
+
+  /// Get a value from the state.
+  pub fn get(&self, name: &str) -> Option<&Value> {
+    self.values.get(name)
+  }
+
+  /// Set a value in the state.
+  pub fn set<N: Into<String> + AsRef<str>>(&mut self, name: N, replacement: Value) {
+    self.values.insert(name.into(), replacement);
+  }
+}
+
+impl Default for State {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+/// An executor.
+#[derive(Debug)]
 pub struct Executor {
+  /// The manifest to use for execution.
   manifest: Manifest,
 }
 
 impl Executor {
+  /// Create a new executor.
   pub fn new(manifest: Manifest) -> Self {
     Self { manifest }
   }
 
+  /// Execute the actions.
   pub async fn execute(&self) -> anyhow::Result<()> {
-    match &self.manifest.actions {
-      | Actions::Suite(suites) => self.execute_suite(suites).await,
-      | Actions::Flat(actions) => self.execute_flat(actions).await,
-      | Actions::Empty => Ok(println!("No actions found.")),
-    }
+    let replacements = match &self.manifest.actions {
+      | Actions::Suite(suites) => self.suite(suites).await,
+      | Actions::Flat(actions) => self.flat(actions).await,
+      | Actions::Empty => return Ok(println!("No actions found.")),
+    };
+
+    println!("{replacements:#?}");
+
+    Ok(())
   }
 
-  async fn execute_suite(&self, suites: &[ActionSuite]) -> anyhow::Result<()> {
-    let mut replacements = HashMap::<String, String>::new();
+  /// Execute a suite of actions.
+  async fn suite(&self, suites: &[ActionSuite]) -> anyhow::Result<State> {
+    let mut state = State::new();
 
     for ActionSuite { name, actions, .. } in suites {
-      println!(
-        "{symbol} {title}: {name}\n",
-        symbol = style("◆").blue().bold(),
-        title = style("Running suite").blue(),
-        name = style(name).green()
-      );
+      let symbol = "⦿".blue().bold();
+      let title = "Running suite".blue();
+      let name = name.clone().green();
+
+      println!("{symbol} {title}: {name}\n");
 
       for action in actions {
-        self.execute_single(action, &mut replacements).await?;
+        self.single(action, &mut state).await?;
         println!();
       }
     }
 
-    Ok(())
+    Ok(state)
   }
 
-  async fn execute_flat(&self, actions: &[ActionSingle]) -> anyhow::Result<()> {
-    let mut replacements = HashMap::<String, String>::new();
+  /// Execute a flat list of actions.
+  async fn flat(&self, actions: &[ActionSingle]) -> anyhow::Result<State> {
+    let mut state = State::new();
 
     for action in actions {
-      self.execute_single(action, &mut replacements).await?;
+      self.single(action, &mut state).await?;
       println!();
     }
 
-    Ok(())
+    Ok(state)
   }
 
-  async fn execute_single(
-    &self,
-    action: &ActionSingle,
-    replacements: &mut Replacements,
-  ) -> anyhow::Result<()> {
+  /// Execute a single action.
+  async fn single(&self, action: &ActionSingle, state: &mut State) -> anyhow::Result<()> {
     match action {
       | ActionSingle::Copy(action) => action.execute().await,
       | ActionSingle::Move(action) => action.execute().await,
       | ActionSingle::Delete(action) => action.execute().await,
-      | ActionSingle::Echo(action) => action.execute(replacements).await,
-      | ActionSingle::Run(action) => action.execute(replacements).await,
-      | ActionSingle::Prompt(action) => action.execute(replacements).await,
-      | ActionSingle::Replace(action) => action.execute(replacements).await,
+      | ActionSingle::Echo(action) => action.execute(state).await,
+      | ActionSingle::Run(action) => action.execute(state).await,
+      | ActionSingle::Prompt(action) => action.execute(state).await,
+      | ActionSingle::Replace(action) => action.execute(state).await,
       | ActionSingle::Unknown(action) => action.execute().await,
     }
   }

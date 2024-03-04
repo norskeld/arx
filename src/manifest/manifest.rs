@@ -141,9 +141,6 @@ impl Manifest {
       let options = self.get_options(&doc)?;
       let actions = self.get_actions(&doc)?;
 
-      println!("Options: {options:#?}");
-      println!("Actions: {actions:#?}");
-
       self.options = options;
       self.actions = actions;
     }
@@ -426,13 +423,11 @@ impl Manifest {
       },
       | "select" => {
         let nodes = node.children().ok_or(ManifestError::ExpectedSelectNodes)?;
-        let default = nodes.get("default").and_then(|node| node.get_string(0));
 
         Ok(Prompt::Select(Select {
           name: name(nodes)?,
           hint: hint(nodes)?,
           options: options(nodes),
-          default,
         }))
       },
       | "confirm" => {

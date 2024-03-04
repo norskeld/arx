@@ -140,7 +140,7 @@ impl App {
     let inner_git = destination.join(".git");
 
     if inner_git.exists() {
-      println!("Removing {}", inner_git.display());
+      println!("Removing {}\n", inner_git.display());
       fs::remove_dir_all(inner_git)?;
     }
 

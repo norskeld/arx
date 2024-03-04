@@ -1,3 +1,6 @@
+use std::path::{Path, PathBuf};
+
+use run_script::ScriptOptions;
 use unindent::Unindent;
 
 use crate::actions::{State, Value};
@@ -44,8 +47,30 @@ impl Echo {
 }
 
 impl Run {
-  pub async fn execute(&self, _state: &State) -> anyhow::Result<()> {
-    Ok(println!("run action"))
+  pub async fn execute<P>(&self, root: P, state: &State) -> anyhow::Result<()>
+  where
+    P: Into<PathBuf> + AsRef<Path>,
+  {
+    let mut command = self.command.clone();
+
+    if let Some(injects) = &self.injects {
+      for inject in injects {
+        if let Some(Value::String(value)) = state.values.get(inject) {
+          // In format strings we escape `{` and `}` by doubling them.
+          command = command.replace(&format!("{{{inject}}}"), value);
+        }
+      }
+    }
+
+    let options = ScriptOptions {
+      working_directory: Some(root.into()),
+      ..ScriptOptions::new()
+    };
+
+    // NOTE: This will exit the main process in case of error.
+    let (output, _) = run_script::run_script_or_exit!(command, options);
+
+    Ok(println!("{}", output.trim()))
   }
 }
 

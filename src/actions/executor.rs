@@ -73,8 +73,8 @@ impl Executor {
     let mut state = State::new();
 
     for ActionSuite { name, actions, .. } in suites {
-      let symbol = "⦿".blue().bold();
-      let title = "Running suite".blue();
+      let symbol = "+".blue().bold();
+      let title = "Suite".blue();
       let name = name.clone().green();
 
       println!("{symbol} {title}: {name}\n");

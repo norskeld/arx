@@ -6,4 +6,5 @@ pub mod fs;
 pub mod manifest;
 pub mod path;
 pub mod repository;
+pub mod spinner;
 pub mod unpacker;

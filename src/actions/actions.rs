@@ -1,10 +1,13 @@
 use std::path::{Path, PathBuf};
+use std::process;
 
+use crossterm::style::Stylize;
 use run_script::ScriptOptions;
 use unindent::Unindent;
 
 use crate::actions::{State, Value};
 use crate::manifest::actions::*;
+use crate::spinner::Spinner;
 
 impl Copy {
   pub async fn execute(&self) -> anyhow::Result<()> {
@@ -52,6 +55,7 @@ impl Run {
     P: Into<PathBuf> + AsRef<Path>,
   {
     let mut command = self.command.clone();
+    let spinner = Spinner::new();
 
     if let Some(injects) = &self.injects {
       for inject in injects {
@@ -62,13 +66,44 @@ impl Run {
       }
     }
 
+    let name = self
+      .name
+      .clone()
+      .or_else(|| {
+        let lines = command.trim().lines().count();
+
+        if lines > 1 {
+          Some(command.trim().lines().next().unwrap().to_string() + "...")
+        } else {
+          Some(command.clone())
+        }
+      })
+      .unwrap();
+
     let options = ScriptOptions {
       working_directory: Some(root.into()),
       ..ScriptOptions::new()
     };
 
-    // NOTE: This will exit the main process in case of error.
-    let (output, _) = run_script::run_script_or_exit!(command, options);
+    spinner.set_message(format!("{}", name.clone().grey()));
+
+    // Actually run the script.
+    let (code, output, err) = run_script::run_script!(command, options)?;
+    let has_failed = code > 0;
+
+    // Re-format depending on the exit code.
+    let name = if has_failed { name.red() } else { name.green() };
+
+    // Stopping before printing output/errors, otherwise the spinner message won't be cleared.
+    spinner.stop_with_message(format!("{name}\n",));
+
+    if has_failed {
+      if !err.is_empty() {
+        eprintln!("{err}");
+      }
+
+      process::exit(1);
+    }
 
     Ok(println!("{}", output.trim()))
   }

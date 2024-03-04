@@ -107,7 +107,7 @@ impl Executor {
       | ActionSingle::Move(action) => action.execute().await,
       | ActionSingle::Delete(action) => action.execute().await,
       | ActionSingle::Echo(action) => action.execute(state).await,
-      | ActionSingle::Run(action) => action.execute(state).await,
+      | ActionSingle::Run(action) => action.execute(&self.manifest.root, state).await,
       | ActionSingle::Prompt(action) => action.execute(state).await,
       | ActionSingle::Replace(action) => action.execute(state).await,
       | ActionSingle::Unknown(action) => action.execute().await,

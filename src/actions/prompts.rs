@@ -1,13 +1,14 @@
 use std::fmt::Display;
 
 use inquire::formatter::StringFormatter;
+use inquire::required;
 use inquire::ui::{Color, RenderConfig, StyleSheet, Styled};
 use inquire::{Confirm, Editor, Select, Text};
 
 use crate::actions::{State, Value};
 use crate::manifest::prompts;
 
-/// Helper struct holding static methods for convenience.
+/// Helper struct holding useful static methods.
 struct Inquirer;
 
 impl Inquirer {
@@ -83,6 +84,8 @@ impl prompts::Input {
 
     if let Some(default) = &self.default {
       prompt = prompt.with_default(default);
+    } else {
+      prompt = prompt.with_validator(required!("This field is required."));
     }
 
     if let Ok(value) = prompt.prompt() {

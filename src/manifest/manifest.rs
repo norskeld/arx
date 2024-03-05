@@ -124,9 +124,9 @@ pub struct Manifest {
 
 impl Manifest {
   /// Creates a new manifest from the given path and options.
-  pub fn with_options(path: &Path) -> Self {
+  pub fn new(root: &Path) -> Self {
     Self {
-      root: path.to_path_buf(),
+      root: root.to_path_buf(),
       options: ManifestOptions::default(),
       actions: Actions::Empty,
     }
@@ -145,7 +145,6 @@ impl Manifest {
 
   /// Checks if the manifest exists under `self.root`.
   fn exists(&self) -> bool {
-    // TODO: Allow to override the config name.
     let file = self.root.join(MANIFEST_NAME);
     let file_exists = file.try_exists();
 

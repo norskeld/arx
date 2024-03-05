@@ -19,8 +19,6 @@ pub enum ManifestError {
   ParseFail(#[from] kdl::KdlError),
   #[error("You can use either suites of actions or a flat list of single actions, not both.")]
   MixedActions,
-  #[error("Unknown node '{0}'.")]
-  UnknownNode(String),
   #[error("Unknown prompt '{0}'.")]
   UnknownPrompt(String),
   #[error("Expected a suite name.")]

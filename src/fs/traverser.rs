@@ -20,6 +20,23 @@ pub struct Match {
   pub entry: DirEntry,
 }
 
+impl Match {
+  /// Checks if the match is a directory.
+  pub fn is_dir(&self) -> bool {
+    self.entry.file_type().is_dir()
+  }
+
+  /// Checks if the match is a file.
+  pub fn is_file(&self) -> bool {
+    self.entry.file_type().is_file()
+  }
+
+  /// Checks if the match is a full match.
+  pub fn is_full(&self) -> bool {
+    self.captured == self.path
+  }
+}
+
 #[derive(Debug)]
 pub struct TraverseOptions {
   /// Directory to traverse.

@@ -104,7 +104,7 @@ impl Executor {
 
     match action {
       | ActionSingle::Copy(action) => action.execute(root).await,
-      | ActionSingle::Move(action) => action.execute().await,
+      | ActionSingle::Move(action) => action.execute(root).await,
       | ActionSingle::Delete(action) => action.execute().await,
       | ActionSingle::Echo(action) => action.execute(state).await,
       | ActionSingle::Run(action) => action.execute(root, state).await,

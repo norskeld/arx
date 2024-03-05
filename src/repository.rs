@@ -66,19 +66,6 @@ pub enum RepositoryHost {
   BitBucket,
 }
 
-/// Container for a repository host.
-#[derive(Debug)]
-pub enum Host {
-  Known(RepositoryHost),
-  Unknown,
-}
-
-impl Default for Host {
-  fn default() -> Self {
-    Host::Known(RepositoryHost::default())
-  }
-}
-
 /// Repository meta or *ref*, i.e. branch, tag or commit.
 ///
 /// This newtype exists solely for providing the default value.
@@ -169,8 +156,6 @@ impl FromStr for RemoteRepository {
       is_valid_user(ch) || ch == '.'
     }
 
-    // TODO: Handle an edge case with multiple slashes in the repository name.
-
     let input = input.trim();
 
     // Parse host if present or use default otherwise.
@@ -198,6 +183,10 @@ impl FromStr for RemoteRepository {
 
     // Parse repository name.
     let (repo, input) = if let Some((repo, rest)) = input.split_once('#') {
+      if repo.contains("//") {
+        return Err(ParseError::MultipleSlash);
+      }
+
       if repo.chars().all(is_valid_repo) {
         (repo.to_string(), Some(rest))
       } else {

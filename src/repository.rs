@@ -7,7 +7,7 @@ use git2::build::CheckoutBuilder;
 use git2::Repository as GitRepository;
 use thiserror::Error;
 
-use crate::fs::Traverser;
+use crate::path::Traverser;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ParseError {

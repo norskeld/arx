@@ -1,10 +1,9 @@
 #![allow(clippy::module_inception)]
 
-pub mod actions;
+pub(crate) mod actions;
 pub mod app;
-pub mod fs;
-pub mod manifest;
-pub mod path;
-pub mod repository;
-pub mod spinner;
-pub mod unpacker;
+pub(crate) mod manifest;
+pub(crate) mod path;
+pub(crate) mod repository;
+pub(crate) mod spinner;
+pub(crate) mod unpacker;

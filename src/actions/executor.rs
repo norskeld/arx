@@ -102,14 +102,16 @@ impl Executor {
 
   /// Execute a single action.
   async fn single(&self, action: &ActionSingle, state: &mut State) -> anyhow::Result<()> {
+    let root = &self.manifest.root;
+
     match action {
       | ActionSingle::Copy(action) => action.execute().await,
       | ActionSingle::Move(action) => action.execute().await,
       | ActionSingle::Delete(action) => action.execute().await,
       | ActionSingle::Echo(action) => action.execute(state).await,
-      | ActionSingle::Run(action) => action.execute(&self.manifest.root, state).await,
+      | ActionSingle::Run(action) => action.execute(root, state).await,
       | ActionSingle::Prompt(action) => action.execute(state).await,
-      | ActionSingle::Replace(action) => action.execute(state).await,
+      | ActionSingle::Replace(action) => action.execute(root, state).await,
       | ActionSingle::Unknown(action) => action.execute().await,
     }
   }

@@ -1,11 +1,16 @@
 use std::path::{Path, PathBuf};
 use std::process;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use crossterm::style::Stylize;
 use run_script::ScriptOptions;
+use tokio::fs::{File, OpenOptions};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use unindent::Unindent;
 
 use crate::actions::{State, Value};
+use crate::fs::Traverser;
 use crate::manifest::actions::*;
 use crate::spinner::Spinner;
 
@@ -60,7 +65,6 @@ impl Run {
     if let Some(injects) = &self.injects {
       for inject in injects {
         if let Some(Value::String(value)) = state.values.get(inject) {
-          // In format strings we escape `{` and `}` by doubling them.
           command = command.replace(&format!("{{{inject}}}"), value);
         }
       }
@@ -121,8 +125,57 @@ impl Prompt {
 }
 
 impl Replace {
-  pub async fn execute(&self, _state: &State) -> anyhow::Result<()> {
-    Ok(println!("replace action"))
+  pub async fn execute<P>(&self, root: P, state: &State) -> anyhow::Result<()>
+  where
+    P: Into<PathBuf> + AsRef<Path>,
+  {
+    let spinner = Spinner::new();
+    let start = Instant::now();
+
+    // If no glob pattern specified, traverse all files.
+    let pattern = self.glob.clone().unwrap_or("**/*".to_string());
+
+    let traverser = Traverser::new(root.into())
+      .ignore_dirs(true)
+      .contents_first(true)
+      .pattern(&pattern);
+
+    if !self.replacements.is_empty() {
+      spinner.set_message("Performing replacements");
+
+      for matched in traverser.iter().flatten() {
+        let mut buffer = String::new();
+        let mut file = File::open(&matched.path).await?;
+
+        file.read_to_string(&mut buffer).await?;
+
+        for replacement in &self.replacements {
+          if let Some(Value::String(value)) = state.values.get(replacement) {
+            buffer = buffer.replace(&format!("{{{replacement}}}"), value);
+          }
+        }
+
+        let mut result = OpenOptions::new()
+          .write(true)
+          .truncate(true)
+          .open(&matched.path)
+          .await?;
+
+        result.write_all(buffer.as_bytes()).await?;
+      }
+
+      // Add artificial delay if replacements were performed too fast.
+      let elapsed = start.elapsed();
+
+      // This way we spent at least 1 second before stopping the spinner.
+      if elapsed < Duration::from_millis(750) {
+        thread::sleep(Duration::from_millis(1_000) - elapsed);
+      }
+
+      spinner.stop_with_message("Successfully performed replacements\n");
+    }
+
+    Ok(())
   }
 }
 

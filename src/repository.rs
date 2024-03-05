@@ -169,7 +169,7 @@ impl FromStr for RemoteRepository {
       is_valid_user(ch) || ch == '.'
     }
 
-    // TODO: Handle an edge case with multuple slashes in the repository name.
+    // TODO: Handle an edge case with multiple slashes in the repository name.
 
     let input = input.trim();
 

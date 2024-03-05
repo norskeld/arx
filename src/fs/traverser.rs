@@ -30,11 +30,6 @@ impl Match {
   pub fn is_file(&self) -> bool {
     self.entry.file_type().is_file()
   }
-
-  /// Checks if the match is a full match.
-  pub fn is_full(&self) -> bool {
-    self.captured == self.path
-  }
 }
 
 #[derive(Debug)]

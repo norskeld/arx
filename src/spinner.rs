@@ -28,6 +28,7 @@ impl Spinner {
   }
 
   /// Stops the spinner.
+  #[allow(dead_code)]
   pub fn stop(&self) {
     self.spinner.finish();
   }
@@ -41,6 +42,7 @@ impl Spinner {
   }
 
   /// Stops the spinner and clears the message.
+  #[allow(dead_code)]
   pub fn stop_with_clear(&self) {
     self.spinner.finish_and_clear();
   }

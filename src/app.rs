@@ -47,16 +47,6 @@ pub enum BaseCommands {
   },
 }
 
-impl BaseCommands {
-  pub fn path(&self) -> Option<PathBuf> {
-    match self {
-      | BaseCommands::Remote { path, .. } | BaseCommands::Local { path, .. } => {
-        path.as_ref().map(PathBuf::from)
-      },
-    }
-  }
-}
-
 #[derive(Debug)]
 pub struct App {
   cli: Cli,
@@ -68,12 +58,6 @@ impl App {
   }
 
   pub async fn run(self) -> anyhow::Result<()> {
-    // TODO: For `Remote` and `Local` variants check if destination already exists before
-    // downloading or performing local clone.
-    if let Some(path) = &self.cli.command.path() {
-      todo!("Check if destination {path:?} already exists");
-    }
-
     // Load the manifest.
     let manifest = match self.cli.command {
       | BaseCommands::Remote { src, path, meta } => Self::remote(src, path, meta).await?,
@@ -98,6 +82,11 @@ impl App {
 
     let name = path.unwrap_or(remote.repo.clone());
     let destination = PathBuf::from(name);
+
+    // Check if destination already exists before downloading.
+    if let Ok(true) = &destination.try_exists() {
+      anyhow::bail!("{} already exists", destination.display());
+    }
 
     // Fetch the tarball as bytes (compressed).
     let tarball = remote.fetch().await?;
@@ -131,6 +120,11 @@ impl App {
         .map(|name| name.into())
         .unwrap_or_default()
     };
+
+    // Check if destination already exists before performing local clone.
+    if let Ok(true) = &destination.try_exists() {
+      anyhow::bail!("{} already exists", destination.display());
+    }
 
     // Copy the directory.
     local.copy(&destination)?;

@@ -138,11 +138,8 @@ impl Manifest {
   pub fn load(&mut self) -> Result<(), ManifestError> {
     if self.exists() {
       let doc = self.parse()?;
-      let options = self.get_options(&doc)?;
-      let actions = self.get_actions(&doc)?;
-
-      self.options = options;
-      self.actions = actions;
+      self.options = self.get_options(&doc)?;
+      self.actions = self.get_actions(&doc)?;
     }
 
     Ok(())

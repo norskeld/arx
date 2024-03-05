@@ -14,9 +14,9 @@ const MANIFEST_NAME: &str = "arx.kdl";
 #[derive(Debug, Error)]
 pub enum ManifestError {
   #[error("Couldn't read the manifest.")]
-  ReadFail(#[from] io::Error),
+  ReadFail(io::Error),
   #[error("Couldn't parse the manifest.")]
-  ParseFail(#[from] kdl::KdlError),
+  ParseFail(kdl::KdlError),
   #[error("You can use either suites of actions or a flat list of single actions, not both.")]
   MixedActions,
   #[error("Unknown prompt '{0}'.")]
@@ -49,6 +49,18 @@ pub struct ManifestOptions {
 impl Default for ManifestOptions {
   fn default() -> Self {
     Self { delete: true }
+  }
+}
+
+/// Manifest options that may override parsed options.
+pub struct ManifestOptionsOverrides {
+  /// Whether to delete the manifest after we (successfully) done running.
+  pub delete: Option<bool>,
+}
+
+impl Default for ManifestOptionsOverrides {
+  fn default() -> Self {
+    Self { delete: None }
   }
 }
 
@@ -116,6 +128,8 @@ pub enum ActionSingle {
 pub struct Manifest {
   /// Manifest directory.
   pub root: PathBuf,
+  /// Manifest file path.
+  pub config: PathBuf,
   /// Manifest options.
   pub options: ManifestOptions,
   /// Actions.
@@ -125,10 +139,20 @@ pub struct Manifest {
 impl Manifest {
   /// Creates a new manifest from the given path and options.
   pub fn new(root: &Path) -> Self {
+    let root = root.to_path_buf();
+
     Self {
-      root: root.to_path_buf(),
+      config: root.join(MANIFEST_NAME),
       options: ManifestOptions::default(),
       actions: Actions::Empty,
+      root,
+    }
+  }
+
+  /// Tries to apply the given overrides to the manifest options.
+  pub fn override_with(&mut self, overrides: ManifestOptionsOverrides) {
+    if let Some(delete) = overrides.delete {
+      self.options.delete = delete;
     }
   }
 
@@ -145,10 +169,7 @@ impl Manifest {
 
   /// Checks if the manifest exists under `self.root`.
   fn exists(&self) -> bool {
-    let file = self.root.join(MANIFEST_NAME);
-    let file_exists = file.try_exists();
-
-    file_exists.is_ok()
+    self.config.try_exists().unwrap_or(false)
   }
 
   /// Reads and parses the manifest into a [KdlDocument].

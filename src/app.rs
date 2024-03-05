@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 use crate::actions::Executor;
-use crate::manifest::Manifest;
+use crate::manifest::{Manifest, ManifestOptionsOverrides};
 use crate::repository::{LocalRepository, RemoteRepository};
 use crate::unpacker::Unpacker;
 
@@ -12,18 +12,14 @@ use crate::unpacker::Unpacker;
 #[command(version, about, long_about = None)]
 pub struct Cli {
   #[command(subcommand)]
-  pub command: BaseCommands,
-
-  /// Delete arx config after scaffolding.
-  #[arg(short, long)]
-  pub delete: bool,
+  pub command: BaseCommand,
 }
 
 #[derive(Debug, Subcommand)]
-pub enum BaseCommands {
+pub enum BaseCommand {
   /// Scaffold from a remote repository.
   Remote {
-    /// Template repository to use for scaffolding.
+    /// Repository to use for scaffolding.
     src: String,
 
     /// Directory to scaffold to.
@@ -32,10 +28,14 @@ pub enum BaseCommands {
     /// Scaffold from a specified ref (branch, tag, or commit).
     #[arg(name = "REF", short = 'r', long = "ref")]
     meta: Option<String>,
+
+    /// Delete arx config after scaffolding.
+    #[arg(short, long)]
+    delete: Option<bool>,
   },
   /// Scaffold from a local repository.
   Local {
-    /// Template repository to use for scaffolding.
+    /// Repository to use for scaffolding.
     src: String,
 
     /// Directory to scaffold to.
@@ -44,6 +44,10 @@ pub enum BaseCommands {
     /// Scaffold from a specified ref (branch, tag, or commit).
     #[arg(name = "REF", short = 'r', long = "ref")]
     meta: Option<String>,
+
+    /// Delete arx config after scaffolding.
+    #[arg(short, long)]
+    delete: Option<bool>,
   },
 }
 
@@ -60,8 +64,14 @@ impl App {
   pub async fn run(self) -> anyhow::Result<()> {
     // Load the manifest.
     let manifest = match self.cli.command {
-      | BaseCommands::Remote { src, path, meta } => Self::remote(src, path, meta).await?,
-      | BaseCommands::Local { src, path, meta } => Self::local(src, path, meta).await?,
+      | BaseCommand::Remote { src, path, meta, delete } => {
+        let options = ManifestOptionsOverrides { delete };
+        Self::remote(src, path, meta, options).await?
+      },
+      | BaseCommand::Local { src, path, meta, delete } => {
+        let options = ManifestOptionsOverrides { delete };
+        Self::local(src, path, meta, options).await?
+      },
     };
 
     // Create executor and kick off execution.
@@ -76,6 +86,7 @@ impl App {
     src: String,
     path: Option<String>,
     meta: Option<String>,
+    overrides: ManifestOptionsOverrides,
   ) -> anyhow::Result<Manifest> {
     // Parse repository.
     let remote = RemoteRepository::new(src, meta)?;
@@ -97,7 +108,9 @@ impl App {
 
     // Now we need to read the manifest (if it is present).
     let mut manifest = Manifest::new(&destination);
+
     manifest.load()?;
+    manifest.override_with(overrides);
 
     Ok(manifest)
   }
@@ -107,6 +120,7 @@ impl App {
     src: String,
     path: Option<String>,
     meta: Option<String>,
+    overrides: ManifestOptionsOverrides,
   ) -> anyhow::Result<Manifest> {
     // Create repository.
     let local = LocalRepository::new(src, meta);
@@ -140,7 +154,9 @@ impl App {
 
     // Now we need to read the manifest (if it is present).
     let mut manifest = Manifest::new(&destination);
+
     manifest.load()?;
+    manifest.override_with(overrides);
 
     Ok(manifest)
   }

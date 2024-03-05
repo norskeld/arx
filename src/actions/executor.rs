@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crossterm::style::Stylize;
+use tokio::fs;
 
 use crate::manifest::{ActionSingle, ActionSuite, Actions, Manifest};
 
@@ -57,17 +58,22 @@ impl Executor {
 
   /// Execute the actions.
   pub async fn execute(&self) -> anyhow::Result<()> {
-    let _ = match &self.manifest.actions {
-      | Actions::Suite(suites) => self.suite(suites).await,
-      | Actions::Flat(actions) => self.flat(actions).await,
-      | Actions::Empty => return Ok(println!("No actions found.")),
+    match &self.manifest.actions {
+      | Actions::Suite(suites) => self.suite(suites).await?,
+      | Actions::Flat(actions) => self.flat(actions).await?,
+      | Actions::Empty => println!("No actions found."),
     };
+
+    // Delete the config file if needed.
+    if self.manifest.options.delete {
+      fs::remove_file(&self.manifest.config).await?;
+    }
 
     Ok(())
   }
 
   /// Execute a suite of actions.
-  async fn suite(&self, suites: &[ActionSuite]) -> anyhow::Result<State> {
+  async fn suite(&self, suites: &[ActionSuite]) -> anyhow::Result<()> {
     let mut state = State::new();
 
     for ActionSuite { name, actions, .. } in suites {
@@ -83,11 +89,11 @@ impl Executor {
       }
     }
 
-    Ok(state)
+    Ok(())
   }
 
   /// Execute a flat list of actions.
-  async fn flat(&self, actions: &[ActionSingle]) -> anyhow::Result<State> {
+  async fn flat(&self, actions: &[ActionSingle]) -> anyhow::Result<()> {
     let mut state = State::new();
 
     for action in actions {
@@ -95,7 +101,7 @@ impl Executor {
       println!();
     }
 
-    Ok(state)
+    Ok(())
   }
 
   /// Execute a single action.

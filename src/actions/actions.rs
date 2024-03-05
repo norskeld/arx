@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::thread;
@@ -6,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use crossterm::style::Stylize;
 use run_script::ScriptOptions;
-use tokio::fs::{File, OpenOptions};
+use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use unindent::Unindent;
 
@@ -21,10 +20,9 @@ impl Copy {
   where
     P: Into<PathBuf> + AsRef<Path>,
   {
-    let root: PathBuf = root.into();
-    let destination = &root.join(&self.to);
+    let destination = root.as_ref().join(&self.to);
 
-    let traverser = Traverser::new(&root)
+    let traverser = Traverser::new(root.as_ref())
       .ignore_dirs(true)
       .contents_first(true)
       .pattern(&self.from);
@@ -35,15 +33,20 @@ impl Copy {
     );
 
     for matched in traverser.iter().flatten() {
-      let target = destination.join(&matched.captured).clean();
+      let name = matched
+        .path
+        .file_name()
+        .expect("Path should end with valid file name");
+
+      let target = destination.join(name).clean();
 
       if !self.overwrite && target.is_file() {
         continue;
       }
 
       if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)?;
-        fs::copy(&matched.path, &target)?;
+        fs::create_dir_all(parent).await?;
+        fs::copy(&matched.path, &target).await?;
       }
 
       println!("└─ {} ╌╌ {}", &matched.path.display(), &target.display());
@@ -63,7 +66,7 @@ impl Move {
 
     let traverser = Traverser::new(&root)
       .ignore_dirs(false)
-      .contents_first(false)
+      .contents_first(true)
       .pattern(&self.from);
 
     println!(
@@ -72,21 +75,22 @@ impl Move {
     );
 
     for matched in traverser.iter().flatten() {
-      let target = if matched.is_full() {
-        destination
-          .join(matched.captured.file_name().unwrap())
-          .clean()
-      } else {
-        destination.join(&matched.captured).clean()
-      };
+      let name = matched
+        .path
+        .file_name()
+        .expect("Path should end with valid file name");
 
-      // FIXME: Use something else than `.exists()`.
+      let target = destination.join(name).clean();
+
+      // FIXME: Use something else other than `.exists()`.
       if !self.overwrite && target.exists() {
         continue;
       }
 
-      // Move or rename.
-      fs::rename(&matched.path, &target)?;
+      if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).await?;
+        fs::rename(&matched.path, &target).await?;
+      }
 
       println!("└─ {} ╌╌ {}", &matched.path.display(), &target.display());
     }
@@ -96,8 +100,34 @@ impl Move {
 }
 
 impl Delete {
-  pub async fn execute(&self) -> anyhow::Result<()> {
-    Ok(println!("rm action"))
+  pub async fn execute<P>(&self, root: P) -> anyhow::Result<()>
+  where
+    P: Into<PathBuf> + AsRef<Path>,
+  {
+    let root: PathBuf = root.into();
+
+    let traverser = Traverser::new(root)
+      .ignore_dirs(false)
+      .contents_first(false)
+      .pattern(&self.target);
+
+    println!("⋅ Deleting: {}", &self.target.clone().dim());
+
+    for matched in traverser.iter().flatten() {
+      let target = &matched.path.clean();
+
+      if matched.is_file() {
+        fs::remove_file(target).await?;
+      } else if matched.is_dir() {
+        fs::remove_dir_all(target).await?;
+      } else {
+        continue;
+      }
+
+      println!("└─ {}", &target.display());
+    }
+
+    Ok(())
   }
 }
 

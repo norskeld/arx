@@ -1,4 +1,4 @@
-#![allow(clippy::module_inception)]
+#![allow(clippy::module_inception, clippy::enum_variant_names)]
 
 pub(crate) mod actions;
 pub mod app;

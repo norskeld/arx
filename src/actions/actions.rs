@@ -18,7 +18,7 @@ use crate::spinner::Spinner;
 impl Copy {
   pub async fn execute<P>(&self, root: P) -> anyhow::Result<()>
   where
-    P: Into<PathBuf> + AsRef<Path>,
+    P: AsRef<Path>,
   {
     let destination = root.as_ref().join(&self.to);
 
@@ -59,12 +59,11 @@ impl Copy {
 impl Move {
   pub async fn execute<P>(&self, root: P) -> anyhow::Result<()>
   where
-    P: Into<PathBuf> + AsRef<Path>,
+    P: AsRef<Path>,
   {
-    let root: PathBuf = root.into();
-    let destination = &root.join(&self.to);
+    let destination = root.as_ref().join(&self.to);
 
-    let traverser = Traverser::new(&root)
+    let traverser = Traverser::new(root.as_ref())
       .ignore_dirs(false)
       .contents_first(true)
       .pattern(&self.from);
@@ -82,9 +81,10 @@ impl Move {
 
       let target = destination.join(name).clean();
 
-      // FIXME: Use something else other than `.exists()`.
-      if !self.overwrite && target.exists() {
-        continue;
+      if !self.overwrite {
+        if let Ok(true) = target.try_exists() {
+          continue;
+        }
       }
 
       if let Some(parent) = target.parent() {
@@ -102,11 +102,9 @@ impl Move {
 impl Delete {
   pub async fn execute<P>(&self, root: P) -> anyhow::Result<()>
   where
-    P: Into<PathBuf> + AsRef<Path>,
+    P: AsRef<Path>,
   {
-    let root: PathBuf = root.into();
-
-    let traverser = Traverser::new(root)
+    let traverser = Traverser::new(root.as_ref())
       .ignore_dirs(false)
       .contents_first(false)
       .pattern(&self.target);
@@ -226,7 +224,7 @@ impl Prompt {
 impl Replace {
   pub async fn execute<P>(&self, root: P, state: &State) -> anyhow::Result<()>
   where
-    P: Into<PathBuf> + AsRef<Path>,
+    P: AsRef<Path>,
   {
     let spinner = Spinner::new();
     let start = Instant::now();
@@ -234,7 +232,7 @@ impl Replace {
     // If no glob pattern specified, traverse all files.
     let pattern = self.glob.clone().unwrap_or("**/*".to_string());
 
-    let traverser = Traverser::new(root.into())
+    let traverser = Traverser::new(root.as_ref())
       .ignore_dirs(true)
       .contents_first(true)
       .pattern(&pattern);

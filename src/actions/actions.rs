@@ -10,9 +10,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use unindent::Unindent;
 
 use crate::actions::{State, Value};
-use crate::fs::Traverser;
 use crate::manifest::actions::*;
 use crate::path::PathClean;
+use crate::path::Traverser;
 use crate::spinner::Spinner;
 
 impl Copy {

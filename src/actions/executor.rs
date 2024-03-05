@@ -57,13 +57,11 @@ impl Executor {
 
   /// Execute the actions.
   pub async fn execute(&self) -> anyhow::Result<()> {
-    let replacements = match &self.manifest.actions {
+    let _ = match &self.manifest.actions {
       | Actions::Suite(suites) => self.suite(suites).await,
       | Actions::Flat(actions) => self.flat(actions).await,
       | Actions::Empty => return Ok(println!("No actions found.")),
     };
-
-    println!("{replacements:#?}");
 
     Ok(())
   }
@@ -105,7 +103,7 @@ impl Executor {
     let root = &self.manifest.root;
 
     match action {
-      | ActionSingle::Copy(action) => action.execute().await,
+      | ActionSingle::Copy(action) => action.execute(root).await,
       | ActionSingle::Move(action) => action.execute().await,
       | ActionSingle::Delete(action) => action.execute().await,
       | ActionSingle::Echo(action) => action.execute(state).await,

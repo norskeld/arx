@@ -9,7 +9,7 @@ pub struct Copy {
   pub from: String,
   /// Where to copy to.
   pub to: String,
-  /// Whether to overwrite or not.
+  /// Whether to overwrite or not. Defaults to `true`.
   pub overwrite: bool,
 }
 
@@ -20,7 +20,7 @@ pub struct Move {
   pub from: String,
   /// Where to move to.
   pub to: String,
-  /// Whether to overwrite or not.
+  /// Whether to overwrite or not. Defaults to `true`.
   pub overwrite: bool,
 }
 
@@ -46,7 +46,7 @@ pub struct Echo {
   ///
   /// All placeholders are processed _before_ running a command.
   pub injects: Option<HashSet<String>>,
-  /// Whether to trim multiline message or not.
+  /// Whether to trim multiline message or not. Defaults to `true`.
   pub trim: bool,
 }
 
@@ -56,12 +56,12 @@ pub struct Run {
   /// Command name. Optional, defaults either to the command itself or to the first line of
   /// the multiline command.
   pub name: Option<String>,
-  /// Comannd to run in the shell.
+  /// Command to run in the shell.
   pub command: String,
   /// An optional list of placeholders to be injected into the command. Consider the following
   /// example:
   ///
-  /// We use inject to disambiguate whether `{R_PM}` is part of a command or is a placeholder
+  /// We use `inject` to disambiguate whether `{R_PM}` is part of a command or is a placeholder
   /// that should be replaced with something.
   ///
   /// ```kdl

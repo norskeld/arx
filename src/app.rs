@@ -96,7 +96,7 @@ impl App {
     unpacker.unpack_to(&destination)?;
 
     // Now we need to read the manifest (if it is present).
-    let mut manifest = Manifest::with_options(&destination);
+    let mut manifest = Manifest::new(&destination);
     manifest.load()?;
 
     Ok(manifest)
@@ -139,7 +139,7 @@ impl App {
     }
 
     // Now we need to read the manifest (if it is present).
-    let mut manifest = Manifest::with_options(&destination);
+    let mut manifest = Manifest::new(&destination);
     manifest.load()?;
 
     Ok(manifest)

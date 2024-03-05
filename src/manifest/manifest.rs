@@ -53,15 +53,10 @@ impl Default for ManifestOptions {
 }
 
 /// Manifest options that may override parsed options.
+#[derive(Debug, Default)]
 pub struct ManifestOptionsOverrides {
   /// Whether to delete the manifest after we (successfully) done running.
   pub delete: Option<bool>,
-}
-
-impl Default for ManifestOptionsOverrides {
-  fn default() -> Self {
-    Self { delete: None }
-  }
 }
 
 /// Represents a manifest actions set that can be a vec of [ActionSuite] *or* [ActionSingle].

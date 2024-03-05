@@ -117,7 +117,7 @@ impl App {
       local
         .source
         .file_name()
-        .map(|name| name.into())
+        .map(PathBuf::from)
         .unwrap_or_default()
     };
 
@@ -133,7 +133,7 @@ impl App {
     // Delete inner .git.
     let inner_git = destination.join(".git");
 
-    if inner_git.exists() {
+    if let Ok(true) = inner_git.try_exists() {
       println!("Removing {}\n", inner_git.display());
       fs::remove_dir_all(inner_git)?;
     }

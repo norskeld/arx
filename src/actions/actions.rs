@@ -54,8 +54,44 @@ impl Copy {
 }
 
 impl Move {
-  pub async fn execute(&self) -> anyhow::Result<()> {
-    Ok(println!("mv action"))
+  pub async fn execute<P>(&self, root: P) -> anyhow::Result<()>
+  where
+    P: Into<PathBuf> + AsRef<Path>,
+  {
+    let root: PathBuf = root.into();
+    let destination = &root.join(&self.to);
+
+    let traverser = Traverser::new(&root)
+      .ignore_dirs(false)
+      .contents_first(false)
+      .pattern(&self.from);
+
+    println!(
+      "⋅ Moving: {}",
+      format!("{} ╌╌ {}", &self.from, &self.to).dim()
+    );
+
+    for matched in traverser.iter().flatten() {
+      let target = if matched.is_full() {
+        destination
+          .join(matched.captured.file_name().unwrap())
+          .clean()
+      } else {
+        destination.join(&matched.captured).clean()
+      };
+
+      // FIXME: Use something else than `.exists()`.
+      if !self.overwrite && target.exists() {
+        continue;
+      }
+
+      // Move or rename.
+      fs::rename(&matched.path, &target)?;
+
+      println!("└─ {} ╌╌ {}", &matched.path.display(), &target.display());
+    }
+
+    Ok(())
   }
 }
 

@@ -16,7 +16,7 @@ pub enum Value {
 #[derive(Debug)]
 pub struct State {
   /// A map of replacements and associated values.
-  pub values: HashMap<String, Value>,
+  values: HashMap<String, Value>,
 }
 
 impl State {

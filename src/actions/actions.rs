@@ -143,7 +143,7 @@ impl Echo {
 
     if let Some(injects) = &self.injects {
       for inject in injects {
-        if let Some(Value::String(value)) = state.values.get(inject) {
+        if let Some(Value::String(value)) = state.get(inject) {
           message = message.replace(&format!("{{{inject}}}"), value);
         }
       }
@@ -163,7 +163,7 @@ impl Run {
 
     if let Some(injects) = &self.injects {
       for inject in injects {
-        if let Some(Value::String(value)) = state.values.get(inject) {
+        if let Some(Value::String(value)) = state.get(inject) {
           command = command.replace(&format!("{{{inject}}}"), value);
         }
       }
@@ -249,7 +249,7 @@ impl Replace {
         file.read_to_string(&mut buffer).await?;
 
         for replacement in &self.replacements {
-          if let Some(Value::String(value)) = state.values.get(replacement) {
+          if let Some(Value::String(value)) = state.get(replacement) {
             buffer = buffer.replace(&format!("{{{replacement}}}"), value);
           }
         }

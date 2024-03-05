@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::thread;
@@ -12,11 +13,43 @@ use unindent::Unindent;
 use crate::actions::{State, Value};
 use crate::fs::Traverser;
 use crate::manifest::actions::*;
+use crate::path::PathClean;
 use crate::spinner::Spinner;
 
 impl Copy {
-  pub async fn execute(&self) -> anyhow::Result<()> {
-    Ok(println!("cp action"))
+  pub async fn execute<P>(&self, root: P) -> anyhow::Result<()>
+  where
+    P: Into<PathBuf> + AsRef<Path>,
+  {
+    let root: PathBuf = root.into();
+    let destination = &root.join(&self.to);
+
+    let traverser = Traverser::new(&root)
+      .ignore_dirs(true)
+      .contents_first(true)
+      .pattern(&self.from);
+
+    println!(
+      "⋅ Copying: {}",
+      format!("{} ╌╌ {}", &self.from, &self.to).dim()
+    );
+
+    for matched in traverser.iter().flatten() {
+      let target = destination.join(&matched.captured).clean();
+
+      if !self.overwrite && target.is_file() {
+        continue;
+      }
+
+      if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+        fs::copy(&matched.path, &target)?;
+      }
+
+      println!("└─ {} ╌╌ {}", &matched.path.display(), &target.display());
+    }
+
+    Ok(())
   }
 }
 

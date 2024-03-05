@@ -40,10 +40,10 @@ pub struct Traverser {
 
 impl Traverser {
   /// Creates a new (consuming) builder.
-  pub fn new(root: PathBuf) -> Self {
+  pub fn new<P: Into<PathBuf>>(root: P) -> Self {
     Self {
       options: TraverseOptions {
-        root,
+        root: root.into(),
         pattern: None,
         ignore_dirs: false,
         contents_first: false,

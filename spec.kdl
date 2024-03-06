@@ -1,12 +1,12 @@
 // Options defined here can be overridden from CLI.
 options {
-  // Delete arx.kdl after it's done. Defaults to `true`.
+  // Delete arx config file after we're done. Defaults to `true`.
   delete false
 }
 
 // Actions to run after the repository was successfully downloaded and unpacked. All actions or
 // suites of actions run sequentially, there is no concurrency or out-of-order execution for
-// predictable outcome.
+// predictable outcomes.
 //
 // You can define either suites of actions — named groups of actions — or a flat list of actions,
 // but not both.
@@ -19,83 +19,71 @@ options {
 // - No cleanup on failures by default.
 actions {
   suite "hello" {
-    // This action simply echoes the argument into stdout. Raw strings are trimmed and aligned to
-    // the leftmost non-whitespace character.
-    echo trim=true r#"
+    // This action simply echoes the argument to stdout. Raw strings are trimmed by default and
+    // aligned to the leftmost non-whitespace character. Trimming can be disabled with `trim=false`.
+    echo r#"
       Sup! Let's set everything up. We will:
 
       - Print this message.
       - Ask some questions via prompts.
-      - Initialize git repository.
+      - Initialize git repository (not for real).
       - Run some commands that will use input from prompts.
-      - Commit everything.
+      - Commit everything (again, not for real).
     "#
-  }
-
-  suite "git" {
-    // This action runs a given shell command and prints its output to stdout.
-    run "git init"
   }
 
   // In this suite we run a series of prompts asking different questions.
   //
-  // Answers will be stored globally and available from any _subsequent_ action ar suite of actions.
+  // Answers will be stored globally and available from any _subsequent_ action or suite of actions.
   suite "prompts" {
-    // Simple text prompt.
-    prompt "input" {
-      name "R_NAME"
+    // Text prompt.
+    input "repo_name" {
       hint "Repository name"
       default "norskeld/serpent"
     }
 
-    // This will run user's $EDITOR.
-    prompt "editor" {
-      name "R_DESC"
+    // Editor prompt. This runs the default $EDITOR.
+    editor "repo_desc" {
       hint "Repository description"
+      default "Scaffolded with arx"
     }
 
-    // If you don't specify prompt `type`, it will default to "input".
-    prompt {
-      name "R_AUTHOR"
-      hint "Repository author"
-      default "Vladislav M."
-    }
-
-    // Simple select prompt.
-    prompt "select" {
-      name "R_PM"
+    // Select prompt.
+    select "repo_pm" {
       hint "Package manager of choice"
-      variants "npm" "pnpm" "yarn" "bun"
+      options "npm" "pnpm" "yarn" "bun"
       default "npm"
     }
 
-    // If you don't specify default value using `default` node it will be an empty string.
-    prompt {
-      name "R_PM_ARGS"
+    // If no default value provided, prompt will become required.
+    input "repo_pm_args" {
       hint "Additional arguments for package manager"
     }
 
     // Simple confirm prompt.
-    prompt "confirm" {
-      name "R_COMMIT"
+    confirm "should_commit" {
       hint "Whether to stage and commit changes after scaffolding"
       default false
     }
+  }
+
+  suite "git" {
+    // This action runs a given shell command and prints its output to stdout.
+    run "echo git init"
   }
 
   // Here we demonstrate using replacements.
   suite "replacements" {
     // Replace all occurences of given replacements in files that match the glob pattern.
     replace in=".template/**" {
-      "R_NAME"
-      "R_DESC"
-      "R_AUTHOR"
+      "repo_name"
+      "repo_desc"
     }
 
-    // Replace all occurences of given replacements in _all_ files. This is equivalent to "." as the
-    // glob pattern.
+    // Replace all occurences of given replacements in _all_ files. This is equivalent to "**/*" as
+    // the glob pattern.
     replace {
-      "R_PM"
+      "repo_pm"
     }
 
     // Trying to run a non-existent replacement will do nothing (a warning will be issued though).
@@ -120,13 +108,13 @@ actions {
 
   // Here we demonstrate how to inject prompts' values.
   suite "install" {
-    // To disambiguate whether {R_PM} is part of a command or is a replacement that should be
+    // To disambiguate whether {repo_pm} is part of a command or is a replacement that should be
     // replaced with something, we pass `inject` node that explicitly tells arx what to inject
-    // into the string.
+    // into the command.
     //
     // All replacements are processed _before_ running a command.
-    run "{R_PM} install {R_PM_ARGS}" {
-      inject "R_PM" "R_PM_ARGS"
+    run "{repo_pm} install {repo_pm_args}" {
+      inject "repo_pm" "repo_pm_args"
     }
   }
 
@@ -143,8 +131,8 @@ actions {
     // You can name `run` actions for clarity, otherwise it will use either the command itself or
     // the first line of a multiline command as the hint.
     run name="stage and commit" r#"
-      git add .
-      git commit -m 'chore: init repository'
+      echo git add .
+      echo git commit -m 'chore: init repository'
     "#
   }
 }

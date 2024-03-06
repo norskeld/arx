@@ -36,7 +36,7 @@ impl Copy {
       let name = matched
         .path
         .file_name()
-        .expect("Path should end with valid file name");
+        .ok_or(anyhow::anyhow!("Path should end with valid file name"))?;
 
       let target = destination.join(name).clean();
 
@@ -77,7 +77,7 @@ impl Move {
       let name = matched
         .path
         .file_name()
-        .expect("Path should end with valid file name");
+        .ok_or(anyhow::anyhow!("Path should end with valid file name"))?;
 
       let target = destination.join(name).clean();
 

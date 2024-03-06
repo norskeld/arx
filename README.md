@@ -2,9 +2,7 @@
 
 [![Checks](https://img.shields.io/github/actions/workflow/status/norskeld/arx/checks.yml?style=flat-square&colorA=22272d&colorB=22272d&label=checks)](https://github.com/norskeld/arx/actions)
 
-> `A`ugmented `R`epository E`x`tractor
-
-Simple CLI for scaffolding projects from templates in a touch.
+Simple and user-friendly command-line tool for declarative scaffolding.
 
 ## Status
 
@@ -12,7 +10,7 @@ WIP.
 
 ## Acknowledgements
 
-Thanks to [Rich Harris][rich-harris] and his [degit] tool for inspiration. `:^)`
+Thanks to [Rich Harris][rich-harris] and his [degit] for inspiration. `:^)`
 
 ## License
 
@@ -21,5 +19,4 @@ Thanks to [Rich Harris][rich-harris] and his [degit] tool for inspiration. `:^)`
 <!-- Links. -->
 
 [degit]: https://github.com/Rich-Harris/degit
-[kdl]: https://github.com/kdl-org/kdl
 [rich-harris]: https://github.com/Rich-Harris

@@ -3,7 +3,7 @@ name = "arx"
 version = "0.1.0"
 edition = "2021"
 authors = ["Vladislav Mamon <hello@vm.codes>"]
-description = "Simple CLI for scaffolding projects from templates in a touch."
+description = "Simple and user-friendly command-line tool for declarative scaffolding."
 repository = "https://github.com/norskeld/arx"
 publish = false
 

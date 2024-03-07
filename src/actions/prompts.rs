@@ -25,7 +25,6 @@ impl Inquirer {
     default
       .with_prompt_prefix(prompt_prefix)
       .with_answered_prompt_prefix(answered_prefix)
-      .with_answer(stylesheet.with_fg(Color::White))
       .with_default_value(stylesheet.with_fg(Color::DarkGrey))
   }
 

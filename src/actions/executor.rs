@@ -77,15 +77,25 @@ impl Executor {
     let mut state = State::new();
 
     for ActionSuite { name, actions, .. } in suites {
-      let symbol = "+".blue().bold();
-      let title = "Suite".blue();
+      let hint = "Suite:".cyan();
       let name = name.clone().green();
 
-      println!("{symbol} {title}: {name}\n");
+      println!("[{hint} {name}]\n");
 
-      for action in actions {
+      // Man, I hate how peekable iterators work in Rust.
+      let mut it = actions.iter().peekable();
+
+      while let Some(action) = it.next() {
         self.single(action, &mut state).await?;
-        println!();
+
+        // Do not print a trailing newline if the current and the next actions are prompts to
+        // slightly improve visual clarity. Essentially, this way prompts are grouped.
+        if !matches!(
+          (action, it.peek()),
+          (ActionSingle::Prompt(_), Some(ActionSingle::Prompt(_)))
+        ) {
+          println!();
+        }
       }
     }
 

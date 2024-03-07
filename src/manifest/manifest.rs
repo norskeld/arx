@@ -19,14 +19,14 @@ pub enum ManifestError {
   ParseFail(kdl::KdlError),
   #[error("You can use either suites of actions or a flat list of single actions, not both.")]
   MixedActions,
-  #[error("Unknown prompt '{0}'.")]
-  UnknownPrompt(String),
   #[error("Expected a suite name.")]
   ExpectedSuiteName,
   #[error("Expected attribute '{0}' to be present and not empty.")]
   ExpectedAttribute(String),
   #[error("Expected argument.")]
   ExpectedArgument,
+  #[error("Expected name argument.")]
+  ExpectedNameArgument,
   #[error("Expected argument for node '{0}'.")]
   ExpectedArgumentFor(String),
   #[error("Input prompt must have defined name and hint.")]
@@ -283,6 +283,40 @@ impl Manifest {
   fn get_action_single(&self, node: &KdlNode) -> Result<ActionSingle, ManifestError> {
     let kind = node.name().to_string().to_ascii_lowercase();
 
+    #[inline]
+    fn name(node: &KdlNode) -> Result<String, ManifestError> {
+      node
+        .get_string(0)
+        .ok_or(ManifestError::ExpectedNameArgument)
+    }
+
+    #[inline]
+    fn hint(nodes: &KdlDocument) -> Result<String, ManifestError> {
+      nodes
+        .get("hint")
+        .and_then(|node| node.get_string(0))
+        .ok_or(ManifestError::ExpectedArgumentFor("hint".into()))
+    }
+
+    #[inline]
+    fn options(nodes: &KdlDocument) -> Vec<String> {
+      nodes
+        .get_args("options")
+        .into_iter()
+        .filter_map(|arg| arg.as_string().map(str::to_string))
+        .collect()
+    }
+
+    #[inline]
+    fn default_string(nodes: &KdlDocument) -> Option<String> {
+      nodes.get("default").and_then(|node| node.get_string(0))
+    }
+
+    #[inline]
+    fn default_bool(nodes: &KdlDocument) -> Option<bool> {
+      nodes.get("default").and_then(|node| node.get_bool(0))
+    }
+
     let action = match kind.as_str() {
       // Actions for manipulating files and directories.
       | "cp" => {
@@ -316,7 +350,7 @@ impl Manifest {
 
         ActionSingle::Delete(Delete { target })
       },
-      // Running commands and echoing output.
+      // Actions for running commands and echoing output.
       | "echo" => {
         let message = node
           .get_string(0)
@@ -348,11 +382,43 @@ impl Manifest {
 
         ActionSingle::Run(Run { name, command, injects })
       },
-      // Prompts and replacements.
-      | "prompt" => {
-        let prompt = self.get_prompt(node)?;
+      // Actions for prompts and replacements.
+      | "input" => {
+        let nodes = node.children().ok_or(ManifestError::ExpectedInputNodes)?;
 
-        ActionSingle::Prompt(prompt)
+        ActionSingle::Prompt(Prompt::Input(Input {
+          name: name(node)?,
+          hint: hint(nodes)?,
+          default: default_string(nodes),
+        }))
+      },
+      | "editor" => {
+        let nodes = node.children().ok_or(ManifestError::ExpectedEditorNodes)?;
+
+        ActionSingle::Prompt(Prompt::Editor(Editor {
+          name: name(node)?,
+          hint: hint(nodes)?,
+          default: default_string(nodes),
+        }))
+      },
+      | "select" => {
+        let nodes = node.children().ok_or(ManifestError::ExpectedSelectNodes)?;
+
+        ActionSingle::Prompt(Prompt::Select(Select {
+          name: name(node)?,
+          hint: hint(nodes)?,
+          options: options(nodes),
+          default: default_string(nodes),
+        }))
+      },
+      | "confirm" => {
+        let nodes = node.children().ok_or(ManifestError::ExpectedConfirmNodes)?;
+
+        ActionSingle::Prompt(Prompt::Confirm(Confirm {
+          name: name(node)?,
+          hint: hint(nodes)?,
+          default: default_bool(nodes),
+        }))
       },
       | "replace" => {
         let replacements = node
@@ -375,82 +441,5 @@ impl Manifest {
     };
 
     Ok(action)
-  }
-
-  fn get_prompt(&self, node: &KdlNode) -> Result<Prompt, ManifestError> {
-    // Prompt kind, defaults to "input".
-    let kind = node
-      .get_string(0)
-      .unwrap_or("input".into())
-      .to_ascii_lowercase();
-
-    #[inline]
-    fn name(nodes: &KdlDocument) -> Result<String, ManifestError> {
-      nodes
-        .get("name")
-        .and_then(|node| node.get_string(0))
-        .ok_or(ManifestError::ExpectedArgumentFor("name".into()))
-    }
-
-    #[inline]
-    fn hint(nodes: &KdlDocument) -> Result<String, ManifestError> {
-      nodes
-        .get("hint")
-        .and_then(|node| node.get_string(0))
-        .ok_or(ManifestError::ExpectedArgumentFor("hint".into()))
-    }
-
-    #[inline]
-    fn options(nodes: &KdlDocument) -> Vec<String> {
-      nodes
-        .get_args("options")
-        .into_iter()
-        .filter_map(|arg| arg.as_string().map(str::to_string))
-        .collect()
-    }
-
-    // Depending on the type construct a prompt.
-    match kind.as_str() {
-      | "input" => {
-        let nodes = node.children().ok_or(ManifestError::ExpectedInputNodes)?;
-        let default = nodes.get("default").and_then(|node| node.get_string(0));
-
-        Ok(Prompt::Input(Input {
-          name: name(nodes)?,
-          hint: hint(nodes)?,
-          default,
-        }))
-      },
-      | "editor" => {
-        let nodes = node.children().ok_or(ManifestError::ExpectedEditorNodes)?;
-        let default = nodes.get("default").and_then(|node| node.get_string(0));
-
-        Ok(Prompt::Editor(Editor {
-          name: name(nodes)?,
-          hint: hint(nodes)?,
-          default,
-        }))
-      },
-      | "select" => {
-        let nodes = node.children().ok_or(ManifestError::ExpectedSelectNodes)?;
-
-        Ok(Prompt::Select(Select {
-          name: name(nodes)?,
-          hint: hint(nodes)?,
-          options: options(nodes),
-        }))
-      },
-      | "confirm" => {
-        let nodes = node.children().ok_or(ManifestError::ExpectedConfirmNodes)?;
-        let default = nodes.get("default").and_then(|node| node.get_bool(0));
-
-        Ok(Prompt::Confirm(Confirm {
-          name: name(nodes)?,
-          hint: hint(nodes)?,
-          default,
-        }))
-      },
-      | kind => Err(ManifestError::UnknownPrompt(kind.into())),
-    }
   }
 }

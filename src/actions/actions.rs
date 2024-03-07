@@ -278,6 +278,9 @@ impl Replace {
 
 impl Unknown {
   pub async fn execute(&self) -> anyhow::Result<()> {
-    Ok(println!("unknown action {}", self.name))
+    let name = self.name.as_str().underline_yellow();
+    let message = format!("! Unknown action: {name}").yellow();
+
+    Ok(println!("{message}"))
   }
 }

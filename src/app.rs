@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+use crossterm::style::Stylize;
 
 use crate::actions::Executor;
 use crate::manifest::{Manifest, ManifestOptionsOverrides};
@@ -142,13 +143,23 @@ impl App {
 
     // Copy the directory.
     local.copy(&destination)?;
+
+    println!("{}", "~ Cloned repository".dark_grey());
+
+    // Checkout the ref.
     local.checkout(&destination)?;
 
-    // Delete inner .git.
+    println!(
+      "{} {}",
+      "~ Checked out ref:".dark_grey(),
+      local.meta.0.dark_grey()
+    );
+
+    // Delete inner .git directory.
     let inner_git = destination.join(".git");
 
     if let Ok(true) = inner_git.try_exists() {
-      println!("Removing {}\n", inner_git.display());
+      println!("{}", "~ Removed inner .git directory\n".dark_grey());
       fs::remove_dir_all(inner_git)?;
     }
 

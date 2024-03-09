@@ -1,13 +1,27 @@
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use crossterm::style::Stylize;
+use miette::Diagnostic;
+use thiserror::Error;
 
 use crate::actions::Executor;
 use crate::manifest::{Manifest, ManifestOptionsOverrides};
 use crate::repository::{LocalRepository, RemoteRepository};
 use crate::unpacker::Unpacker;
+
+#[derive(Debug, Diagnostic, Error)]
+pub enum AppError {
+  #[error("{message}")]
+  #[diagnostic(code(actions::app::io))]
+  Io {
+    message: String,
+    #[source]
+    source: io::Error,
+  },
+}
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -62,7 +76,18 @@ impl App {
     Self { cli: Cli::parse() }
   }
 
-  pub async fn run(self) -> anyhow::Result<()> {
+  pub async fn run(self) -> miette::Result<()> {
+    // Slightly tweak miette.
+    miette::set_hook(Box::new(|_| {
+      Box::new(
+        miette::MietteHandlerOpts::new()
+          .terminal_links(false)
+          .context_lines(3)
+          .tab_width(4)
+          .build(),
+      )
+    }))?;
+
     // Load the manifest.
     let manifest = match self.cli.command {
       | BaseCommand::Remote { src, path, meta, delete } => {
@@ -88,7 +113,7 @@ impl App {
     path: Option<String>,
     meta: Option<String>,
     overrides: ManifestOptionsOverrides,
-  ) -> anyhow::Result<Manifest> {
+  ) -> miette::Result<Manifest> {
     // Parse repository.
     let remote = RemoteRepository::new(src, meta)?;
 
@@ -97,7 +122,10 @@ impl App {
 
     // Check if destination already exists before downloading.
     if let Ok(true) = &destination.try_exists() {
-      anyhow::bail!("{} already exists", destination.display());
+      miette::bail!(
+        "Failed to scaffold: '{}' already exists.",
+        destination.display()
+      );
     }
 
     // Fetch the tarball as bytes (compressed).
@@ -122,7 +150,7 @@ impl App {
     path: Option<String>,
     meta: Option<String>,
     overrides: ManifestOptionsOverrides,
-  ) -> anyhow::Result<Manifest> {
+  ) -> miette::Result<Manifest> {
     // Create repository.
     let local = LocalRepository::new(src, meta);
 
@@ -138,29 +166,34 @@ impl App {
 
     // Check if destination already exists before performing local clone.
     if let Ok(true) = &destination.try_exists() {
-      anyhow::bail!("{} already exists", destination.display());
+      miette::bail!(
+        "Failed to scaffold: '{}' already exists.",
+        destination.display()
+      );
     }
 
     // Copy the directory.
     local.copy(&destination)?;
 
-    println!("{}", "~ Cloned repository".dark_grey());
+    println!("{}", "~ Cloned repository".dim());
 
     // Checkout the ref.
     local.checkout(&destination)?;
 
-    println!(
-      "{} {}",
-      "~ Checked out ref:".dark_grey(),
-      local.meta.0.dark_grey()
-    );
+    println!("{} {}", "~ Checked out ref:".dim(), local.meta.0.dim());
 
     // Delete inner .git directory.
     let inner_git = destination.join(".git");
 
     if let Ok(true) = inner_git.try_exists() {
-      println!("{}", "~ Removed inner .git directory\n".dark_grey());
-      fs::remove_dir_all(inner_git)?;
+      fs::remove_dir_all(inner_git).map_err(|source| {
+        AppError::Io {
+          message: "Failed to remove inner .git directory.".to_string(),
+          source,
+        }
+      })?;
+
+      println!("{}", "~ Removed inner .git directory\n".dim());
     }
 
     // Now we need to read the manifest (if it is present).

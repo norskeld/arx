@@ -4,19 +4,31 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crossterm::style::Stylize;
+use miette::Diagnostic;
 use run_script::ScriptOptions;
+use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use unindent::Unindent;
 
 use crate::actions::{State, Value};
 use crate::manifest::actions::*;
-use crate::path::PathClean;
-use crate::path::Traverser;
+use crate::path::{PathClean, Traverser};
 use crate::spinner::Spinner;
 
+#[derive(Debug, Diagnostic, Error)]
+pub enum ActionError {
+  #[error("{message}")]
+  #[diagnostic(code(arx::actions::io))]
+  Io {
+    message: String,
+    #[source]
+    source: io::Error,
+  },
+}
+
 impl Copy {
-  pub async fn execute<P>(&self, root: P) -> anyhow::Result<()>
+  pub async fn execute<P>(&self, root: P) -> miette::Result<()>
   where
     P: AsRef<Path>,
   {
@@ -36,7 +48,7 @@ impl Copy {
       let name = matched
         .path
         .file_name()
-        .ok_or(anyhow::anyhow!("Path should end with valid file name"))?;
+        .ok_or_else(|| miette::miette!("Path should end with valid file name."))?;
 
       let target = destination.join(name).clean();
 
@@ -45,8 +57,26 @@ impl Copy {
       }
 
       if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent).await?;
-        fs::copy(&matched.path, &target).await?;
+        fs::create_dir_all(parent).await.map_err(|source| {
+          ActionError::Io {
+            message: format!(
+              "Failed to create directory structure for '{}'.",
+              parent.display()
+            ),
+            source,
+          }
+        })?;
+
+        fs::copy(&matched.path, &target).await.map_err(|source| {
+          ActionError::Io {
+            message: format!(
+              "Failed to copy from '{}' to '{}'.",
+              matched.path.display(),
+              target.display()
+            ),
+            source,
+          }
+        })?;
       }
 
       println!("└─ {} ╌╌ {}", &matched.path.display(), &target.display());
@@ -57,7 +87,7 @@ impl Copy {
 }
 
 impl Move {
-  pub async fn execute<P>(&self, root: P) -> anyhow::Result<()>
+  pub async fn execute<P>(&self, root: P) -> miette::Result<()>
   where
     P: AsRef<Path>,
   {
@@ -77,7 +107,7 @@ impl Move {
       let name = matched
         .path
         .file_name()
-        .ok_or(anyhow::anyhow!("Path should end with valid file name"))?;
+        .ok_or_else(|| miette::miette!("Path should end with valid file name."))?;
 
       let target = destination.join(name).clean();
 
@@ -88,8 +118,26 @@ impl Move {
       }
 
       if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent).await?;
-        fs::rename(&matched.path, &target).await?;
+        fs::create_dir_all(parent).await.map_err(|source| {
+          ActionError::Io {
+            message: format!(
+              "Failed to create directory structure for '{}'.",
+              parent.display()
+            ),
+            source,
+          }
+        })?;
+
+        fs::rename(&matched.path, &target).await.map_err(|source| {
+          ActionError::Io {
+            message: format!(
+              "Failed to move from '{}' to '{}'.",
+              matched.path.display(),
+              target.display()
+            ),
+            source,
+          }
+        })?;
       }
 
       println!("└─ {} ╌╌ {}", &matched.path.display(), &target.display());
@@ -100,7 +148,7 @@ impl Move {
 }
 
 impl Delete {
-  pub async fn execute<P>(&self, root: P) -> anyhow::Result<()>
+  pub async fn execute<P>(&self, root: P) -> miette::Result<()>
   where
     P: AsRef<Path>,
   {
@@ -115,9 +163,19 @@ impl Delete {
       let target = &matched.path.clean();
 
       if matched.is_file() {
-        fs::remove_file(target).await?;
+        fs::remove_file(target).await.map_err(|source| {
+          ActionError::Io {
+            message: format!("Failed to delete file '{}'.", target.display()),
+            source,
+          }
+        })?;
       } else if matched.is_dir() {
-        fs::remove_dir_all(target).await?;
+        fs::remove_dir_all(target).await.map_err(|source| {
+          ActionError::Io {
+            message: format!("Failed to delete directory '{}'.", target.display()),
+            source,
+          }
+        })?;
       } else {
         continue;
       }
@@ -130,7 +188,7 @@ impl Delete {
 }
 
 impl Echo {
-  pub async fn execute(&self, state: &State) -> anyhow::Result<()> {
+  pub async fn execute(&self, state: &State) -> miette::Result<()> {
     let message = if self.trim {
       self.message.trim()
     } else {
@@ -152,7 +210,7 @@ impl Echo {
 }
 
 impl Run {
-  pub async fn execute<P>(&self, root: P, state: &State) -> anyhow::Result<()>
+  pub async fn execute<P>(&self, root: P, state: &State) -> miette::Result<()>
   where
     P: Into<PathBuf> + AsRef<Path>,
   {
@@ -189,7 +247,9 @@ impl Run {
     spinner.set_message(format!("{}", name.clone().grey()));
 
     // Actually run the script.
-    let (code, output, err) = run_script::run_script!(command, options)?;
+    let (code, output, err) = run_script::run_script!(command, options)
+      .map_err(|_| miette::miette!("Failed to run script."))?;
+
     let has_failed = code > 0;
 
     // Re-format depending on the exit code.
@@ -211,7 +271,7 @@ impl Run {
 }
 
 impl Prompt {
-  pub async fn execute(&self, state: &mut State) -> anyhow::Result<()> {
+  pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     match self {
       | Self::Confirm(prompt) => prompt.execute(state).await,
       | Self::Input(prompt) => prompt.execute(state).await,
@@ -222,7 +282,7 @@ impl Prompt {
 }
 
 impl Replace {
-  pub async fn execute<P>(&self, root: P, state: &State) -> anyhow::Result<()>
+  pub async fn execute<P>(&self, root: P, state: &State) -> miette::Result<()>
   where
     P: AsRef<Path>,
   {
@@ -242,9 +302,20 @@ impl Replace {
 
       for matched in traverser.iter().flatten() {
         let mut buffer = String::new();
-        let mut file = File::open(&matched.path).await?;
 
-        file.read_to_string(&mut buffer).await?;
+        let mut file = File::open(&matched.path).await.map_err(|source| {
+          ActionError::Io {
+            message: format!("Failed to open file '{}'.", &matched.path.display()),
+            source,
+          }
+        })?;
+
+        file.read_to_string(&mut buffer).await.map_err(|source| {
+          ActionError::Io {
+            message: format!("Failed to read file '{}'.", &matched.path.display()),
+            source,
+          }
+        })?;
 
         for replacement in &self.replacements {
           if let Some(Value::String(value)) = state.get(replacement) {
@@ -256,9 +327,26 @@ impl Replace {
           .write(true)
           .truncate(true)
           .open(&matched.path)
-          .await?;
+          .await
+          .map_err(|source| {
+            ActionError::Io {
+              message: format!(
+                "Failed to open file '{}' for writing.",
+                &matched.path.display()
+              ),
+              source,
+            }
+          })?;
 
-        result.write_all(buffer.as_bytes()).await?;
+        result
+          .write_all(buffer.as_bytes())
+          .await
+          .map_err(|source| {
+            ActionError::Io {
+              message: format!("Failed to write to the file '{}'.", &matched.path.display()),
+              source,
+            }
+          })?;
       }
 
       // Add artificial delay if replacements were performed too fast.
@@ -277,7 +365,7 @@ impl Replace {
 }
 
 impl Unknown {
-  pub async fn execute(&self) -> anyhow::Result<()> {
+  pub async fn execute(&self) -> miette::Result<()> {
     let name = self.name.as_str().yellow();
     let message = format!("! Unknown action: {name}").yellow();
 

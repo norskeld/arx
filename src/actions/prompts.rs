@@ -68,7 +68,7 @@ impl Inquirer {
 
 impl prompts::Confirm {
   /// Execute the prompt and populate the state.
-  pub async fn execute(&self, state: &mut State) -> anyhow::Result<()> {
+  pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = Inquirer::messages(&self.name, &self.hint);
 
     let mut prompt = Confirm::new(&hint)
@@ -90,7 +90,7 @@ impl prompts::Confirm {
 
 impl prompts::Input {
   /// Execute the prompt and populate the state.
-  pub async fn execute(&self, state: &mut State) -> anyhow::Result<()> {
+  pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = Inquirer::messages(&self.name, &self.hint);
 
     let mut prompt = Text::new(&hint)
@@ -115,7 +115,7 @@ impl prompts::Input {
 
 impl prompts::Select {
   /// Execute the prompt and populate the state.
-  pub async fn execute(&self, state: &mut State) -> anyhow::Result<()> {
+  pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = Inquirer::messages(&self.name, &self.hint);
 
     let options = self.options.iter().map(String::to_string).collect();
@@ -135,7 +135,7 @@ impl prompts::Select {
 
 impl prompts::Editor {
   /// Execute the prompt and populate the state.
-  pub async fn execute(&self, state: &mut State) -> anyhow::Result<()> {
+  pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = Inquirer::messages(&self.name, &self.hint);
 
     let mut prompt = Editor::new(&hint)

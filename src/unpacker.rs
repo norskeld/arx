@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use flate2::bufread::GzDecoder;
+use miette::Diagnostic;
 use tar::Archive;
 use thiserror::Error;
 
@@ -17,7 +18,7 @@ const USE_PERMISSIONS: bool = false;
 #[cfg(not(target_os = "windows"))]
 const USE_PERMISSIONS: bool = true;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Diagnostic, Error, PartialEq)]
 pub enum UnpackError {
   #[error("Couldn't get entries from the tarball.")]
   UnableGetEntries,

@@ -5,11 +5,12 @@ use std::str::FromStr;
 
 use git2::build::CheckoutBuilder;
 use git2::Repository as GitRepository;
+use miette::Diagnostic;
 use thiserror::Error;
 
 use crate::path::Traverser;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Diagnostic, Error, PartialEq)]
 pub enum ParseError {
   #[error("Host must be one of: github/gh, gitlab/gl, or bitbucket/bb.")]
   InvalidHost,
@@ -23,7 +24,7 @@ pub enum ParseError {
   MultipleSlash,
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Diagnostic, Error, PartialEq)]
 pub enum FetchError {
   #[error("Request failed.")]
   RequestFailed,
@@ -33,7 +34,7 @@ pub enum FetchError {
   RequestBodyFailed,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Diagnostic, Error)]
 pub enum CopyError {
   #[error("Failed to create directory.")]
   CreateDirFailed(io::Error),
@@ -41,7 +42,7 @@ pub enum CopyError {
   CopyFailed(io::Error),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Diagnostic, Error)]
 pub enum CheckoutError {
   #[error("Failed to open the git repository.")]
   OpenFailed(git2::Error),

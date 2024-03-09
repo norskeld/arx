@@ -1,8 +1,10 @@
 use std::fs;
-use std::io;
+use std::io::Error as IoError;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use kdl::{KdlDocument, KdlNode};
+use kdl::{KdlDocument, KdlError, KdlNode};
+use miette::{Diagnostic, LabeledSpan, NamedSource, Report};
 use thiserror::Error;
 
 use crate::manifest::actions::*;
@@ -11,32 +13,34 @@ use crate::manifest::KdlUtils;
 
 const MANIFEST_NAME: &str = "arx.kdl";
 
-#[derive(Debug, Error)]
+/// Helper macro to create a [ManifestError::Diagnostic] in a slightly less verbose way.
+macro_rules! diagnostic {
+  ($source:ident = $code:expr, $($key:ident = $value:expr,)* $fmt:literal $($arg:tt)*) => {
+    ManifestError::Diagnostic(
+      miette::Report::from(
+        miette::diagnostic!($($key = $value,)* $fmt $($arg)*)
+      ).with_source_code(Arc::clone($code))
+    )
+  };
+}
+
+#[derive(Debug, Diagnostic, Error)]
 pub enum ManifestError {
-  #[error("Couldn't read the manifest.")]
-  ReadFail(io::Error),
-  #[error("Couldn't parse the manifest.")]
-  ParseFail(kdl::KdlError),
-  #[error("You can use either suites of actions or a flat list of single actions, not both.")]
-  MixedActions,
-  #[error("Expected a suite name.")]
-  ExpectedSuiteName,
-  #[error("Expected attribute '{0}' to be present and not empty.")]
-  ExpectedAttribute(String),
-  #[error("Expected argument.")]
-  ExpectedArgument,
-  #[error("Expected name argument.")]
-  ExpectedNameArgument,
-  #[error("Expected argument for node '{0}'.")]
-  ExpectedArgumentFor(String),
-  #[error("Input prompt must have defined name and hint.")]
-  ExpectedInputNodes,
-  #[error("Editor prompt must have defined name and hint.")]
-  ExpectedEditorNodes,
-  #[error("Select prompt must have defined name, hint and variants.")]
-  ExpectedSelectNodes,
-  #[error("Confirm prompt must have defined name and hint.")]
-  ExpectedConfirmNodes,
+  #[error("{message}")]
+  #[diagnostic(code(arx::manifest::io))]
+  Io {
+    message: String,
+    #[source]
+    source: IoError,
+  },
+
+  #[error(transparent)]
+  #[diagnostic(transparent)]
+  Kdl(KdlError),
+
+  #[error("{0}")]
+  #[diagnostic(transparent)]
+  Diagnostic(Report),
 }
 
 /// Manifest options. These may be overriden from the CLI.
@@ -123,6 +127,8 @@ pub enum ActionSingle {
 pub struct Manifest {
   /// Manifest directory.
   pub root: PathBuf,
+  /// Source. Wrapped in an [Arc] for cheap clones.
+  pub source: Arc<NamedSource>,
   /// Manifest file path.
   pub config: PathBuf,
   /// Manifest options.
@@ -135,11 +141,21 @@ impl Manifest {
   /// Creates a new manifest from the given path and options.
   pub fn new(root: &Path) -> Self {
     let root = root.to_path_buf();
+    let config = root.join(MANIFEST_NAME);
+
+    // NOTE: Creating dummy source first, will be overwritten with actual data on load. This is done
+    // because of some limitations around `NamedSource` and related entities like `SourceCode` which
+    // I couldn't figure out.
+    let source = Arc::new(NamedSource::new(
+      config.display().to_string(),
+      String::default(),
+    ));
 
     Self {
-      config: root.join(MANIFEST_NAME),
+      config,
       options: ManifestOptions::default(),
       actions: Actions::Empty,
+      source,
       root,
     }
   }
@@ -155,8 +171,8 @@ impl Manifest {
   pub fn load(&mut self) -> Result<(), ManifestError> {
     if self.exists() {
       let doc = self.parse()?;
-      self.options = self.get_options(&doc)?;
-      self.actions = self.get_actions(&doc)?;
+      self.options = self.get_manifest_options(&doc)?;
+      self.actions = self.get_manifest_actions(&doc)?;
     }
 
     Ok(())
@@ -168,17 +184,26 @@ impl Manifest {
   }
 
   /// Reads and parses the manifest into a [KdlDocument].
-  fn parse(&self) -> Result<KdlDocument, ManifestError> {
+  fn parse(&mut self) -> Result<KdlDocument, ManifestError> {
     let filename = self.root.join(MANIFEST_NAME);
 
-    let contents = fs::read_to_string(filename).map_err(ManifestError::ReadFail)?;
-    let document = contents.parse().map_err(ManifestError::ParseFail)?;
+    let contents = fs::read_to_string(&filename).map_err(|source| {
+      ManifestError::Io {
+        message: "Failed to read the manifest.".to_string(),
+        source,
+      }
+    })?;
+
+    let document = contents.parse().map_err(ManifestError::Kdl)?;
+
+    // Replace dummy source with actual data.
+    self.source = Arc::new(NamedSource::new(filename.display().to_string(), contents));
 
     Ok(document)
   }
 
   /// Tries to parse options from the manifest.
-  fn get_options(&self, doc: &KdlDocument) -> Result<ManifestOptions, ManifestError> {
+  fn get_manifest_options(&self, doc: &KdlDocument) -> Result<ManifestOptions, ManifestError> {
     let options = doc
       .get("options")
       .and_then(KdlNode::children)
@@ -187,13 +212,21 @@ impl Manifest {
         let mut defaults = ManifestOptions::default();
 
         for node in nodes {
-          let name = node.name().to_string().to_ascii_lowercase();
+          let option = node.name().to_string().to_ascii_lowercase();
 
-          match name.as_str() {
+          match option.as_str() {
             | "delete" => {
-              defaults.delete = node
-                .get_bool(0)
-                .ok_or(ManifestError::ExpectedArgumentFor("delete".into()))?;
+              defaults.delete = node.get_bool(0).ok_or_else(|| {
+                diagnostic!(
+                  source = &self.source,
+                  code = "arx::manifest::options",
+                  labels = vec![LabeledSpan::at(
+                    node.span().to_owned(),
+                    "this node requires a boolean argument"
+                  )],
+                  "Missing required argument."
+                )
+              })?;
             },
             | _ => {
               continue;
@@ -212,7 +245,7 @@ impl Manifest {
   }
 
   /// Tries to parse actions from the manifest.
-  fn get_actions(&self, doc: &KdlDocument) -> Result<Actions, ManifestError> {
+  fn get_manifest_actions(&self, doc: &KdlDocument) -> Result<Actions, ManifestError> {
     #[inline]
     fn is_suite(node: &KdlNode) -> bool {
       node.name().value() == "suite"
@@ -253,7 +286,10 @@ impl Manifest {
         }
         // Otherwise we have invalid actions block.
         else {
-          Err(ManifestError::MixedActions)
+          Err(ManifestError::Diagnostic(miette::miette!(
+            code = "arx::manifest::actions",
+            "You can use either suites of actions or a flat list of single actions, not both."
+          )))
         }
       });
 
@@ -268,7 +304,7 @@ impl Manifest {
     let mut actions = Vec::new();
 
     // Fail if we stumbled upon a nameless suite.
-    let name = node.get_string(0).ok_or(ManifestError::ExpectedSuiteName)?;
+    let name = self.get_arg_string(node)?;
 
     if let Some(children) = node.children() {
       for children in children.nodes() {
@@ -283,79 +319,28 @@ impl Manifest {
   fn get_action_single(&self, node: &KdlNode) -> Result<ActionSingle, ManifestError> {
     let kind = node.name().to_string().to_ascii_lowercase();
 
-    #[inline]
-    fn name(node: &KdlNode) -> Result<String, ManifestError> {
-      node
-        .get_string(0)
-        .ok_or(ManifestError::ExpectedNameArgument)
-    }
-
-    #[inline]
-    fn hint(nodes: &KdlDocument) -> Result<String, ManifestError> {
-      nodes
-        .get("hint")
-        .and_then(|node| node.get_string(0))
-        .ok_or(ManifestError::ExpectedArgumentFor("hint".into()))
-    }
-
-    #[inline]
-    fn options(nodes: &KdlDocument) -> Vec<String> {
-      nodes
-        .get_args("options")
-        .into_iter()
-        .filter_map(|arg| arg.as_string().map(str::to_string))
-        .collect()
-    }
-
-    #[inline]
-    fn default_string(nodes: &KdlDocument) -> Option<String> {
-      nodes.get("default").and_then(|node| node.get_string(0))
-    }
-
-    #[inline]
-    fn default_bool(nodes: &KdlDocument) -> Option<bool> {
-      nodes.get("default").and_then(|node| node.get_bool(0))
-    }
-
     let action = match kind.as_str() {
       // Actions for manipulating files and directories.
       | "cp" => {
-        let from = node
-          .get_string("from")
-          .ok_or(ManifestError::ExpectedAttribute("from".into()))?;
-
-        let to = node
-          .get_string("to")
-          .ok_or(ManifestError::ExpectedAttribute("to".into()))?;
-
-        let overwrite = node.get_bool("overwrite").unwrap_or(true);
-
-        ActionSingle::Copy(Copy { from, to, overwrite })
+        ActionSingle::Copy(Copy {
+          from: self.get_attr_string(node, "from")?,
+          to: self.get_attr_string(node, "to")?,
+          overwrite: node.get_bool("overwrite").unwrap_or(true),
+        })
       },
       | "mv" => {
-        let from = node
-          .get_string("from")
-          .ok_or(ManifestError::ExpectedAttribute("from".into()))?;
-
-        let to = node
-          .get_string("to")
-          .ok_or(ManifestError::ExpectedAttribute("to".into()))?;
-
-        let overwrite = node.get_bool("overwrite").unwrap_or(true);
-
-        ActionSingle::Move(Move { from, to, overwrite })
+        ActionSingle::Move(Move {
+          from: self.get_attr_string(node, "from")?,
+          to: self.get_attr_string(node, "to")?,
+          overwrite: node.get_bool("overwrite").unwrap_or(true),
+        })
       },
-      | "rm" => {
-        let target = node.get_string(0).ok_or(ManifestError::ExpectedArgument)?;
-
-        ActionSingle::Delete(Delete { target })
-      },
+      | "rm" => ActionSingle::Delete(Delete { target: self.get_arg_string(node)? }),
       // Actions for running commands and echoing output.
       | "echo" => {
-        let message = node
-          .get_string(0)
-          .ok_or(ManifestError::ExpectedAttribute("message".into()))?;
+        let message = self.get_arg_string(node)?;
 
+        // TODO: Verify injects have valid type (string values).
         let injects = node.children().map(|children| {
           children
             .get_args("inject")
@@ -370,7 +355,7 @@ impl Manifest {
       },
       | "run" => {
         let name = node.get_string("name");
-        let command = node.get_string(0).ok_or(ManifestError::ExpectedArgument)?;
+        let command = self.get_arg_string(node)?;
 
         let injects = node.children().map(|children| {
           children
@@ -384,40 +369,40 @@ impl Manifest {
       },
       // Actions for prompts and replacements.
       | "input" => {
-        let nodes = node.children().ok_or(ManifestError::ExpectedInputNodes)?;
+        let nodes = self.get_children(node, vec!["hint"])?;
 
         ActionSingle::Prompt(Prompt::Input(Input {
-          name: name(node)?,
-          hint: hint(nodes)?,
-          default: default_string(nodes),
+          name: self.get_arg_string(node)?,
+          hint: self.get_hint(node, nodes)?,
+          default: self.get_default_string(nodes),
         }))
       },
       | "editor" => {
-        let nodes = node.children().ok_or(ManifestError::ExpectedEditorNodes)?;
+        let nodes = self.get_children(node, vec!["hint"])?;
 
         ActionSingle::Prompt(Prompt::Editor(Editor {
-          name: name(node)?,
-          hint: hint(nodes)?,
-          default: default_string(nodes),
+          name: self.get_arg_string(node)?,
+          hint: self.get_hint(node, nodes)?,
+          default: self.get_default_string(nodes),
         }))
       },
       | "select" => {
-        let nodes = node.children().ok_or(ManifestError::ExpectedSelectNodes)?;
+        let nodes = self.get_children(node, vec!["hint", "options"])?;
 
         ActionSingle::Prompt(Prompt::Select(Select {
-          name: name(node)?,
-          hint: hint(nodes)?,
-          options: options(nodes),
-          default: default_string(nodes),
+          name: self.get_arg_string(node)?,
+          hint: self.get_hint(node, nodes)?,
+          options: self.get_options(node, nodes)?,
+          default: self.get_default_string(nodes),
         }))
       },
       | "confirm" => {
-        let nodes = node.children().ok_or(ManifestError::ExpectedConfirmNodes)?;
+        let nodes = self.get_children(node, vec!["hint"])?;
 
         ActionSingle::Prompt(Prompt::Confirm(Confirm {
-          name: name(node)?,
-          hint: hint(nodes)?,
-          default: default_bool(nodes),
+          name: self.get_arg_string(node)?,
+          hint: self.get_hint(node, nodes)?,
+          default: self.get_default_bool(nodes),
         }))
       },
       | "replace" => {
@@ -437,9 +422,150 @@ impl Manifest {
         ActionSingle::Replace(Replace { replacements, glob })
       },
       // Fallback.
-      | action => ActionSingle::Unknown(Unknown { name: action.into() }),
+      | action => ActionSingle::Unknown(Unknown { name: action.to_string() }),
     };
 
     Ok(action)
+  }
+
+  fn get_arg_string(&self, node: &KdlNode) -> Result<String, ManifestError> {
+    let start = node.span().offset();
+    let end = start + node.name().len();
+
+    node.get_string(0).ok_or_else(|| {
+      diagnostic!(
+        source = &self.source,
+        code = "arx::manifest::actions",
+        labels = vec![
+          LabeledSpan::at(start..end, "this node requires a string argument"),
+          LabeledSpan::at_offset(end, "argument should be here")
+        ],
+        "Missing required argument."
+      )
+    })
+  }
+
+  fn get_attr_string(&self, node: &KdlNode, key: &str) -> Result<String, ManifestError> {
+    node.get_string(key).ok_or_else(|| {
+      diagnostic!(
+        source = &self.source,
+        code = "arx::manifest::actions",
+        labels = vec![LabeledSpan::at(
+          node.span().to_owned(),
+          format!("this node requires the `{key}` attribute")
+        )],
+        "Missing required attribute: `{key}`."
+      )
+    })
+  }
+
+  fn get_children<'kdl>(
+    &self,
+    node: &'kdl KdlNode,
+    nodes: Vec<&str>,
+  ) -> Result<&'kdl KdlDocument, ManifestError> {
+    let suffix = if nodes.len() > 1 { "s" } else { "" };
+    let nodes = nodes
+      .iter()
+      .map(|node| format!("`{node}`"))
+      .collect::<Vec<_>>()
+      .join(", ");
+
+    let message = format!("Missing required child node{suffix}: {nodes}.");
+
+    node.children().ok_or_else(|| {
+      diagnostic!(
+        source = &self.source,
+        code = "arx::manifest::actions",
+        labels = vec![LabeledSpan::at(
+          node.span().to_owned(),
+          format!("this node requires the following child nodes: {nodes}")
+        )],
+        "{message}"
+      )
+    })
+  }
+
+  fn get_hint(&self, parent: &KdlNode, nodes: &KdlDocument) -> Result<String, ManifestError> {
+    let hint = nodes.get("hint").ok_or_else(|| {
+      diagnostic!(
+        source = &self.source,
+        code = "arx::manifest::actions",
+        labels = vec![LabeledSpan::at(
+          parent.span().to_owned(),
+          "prompts require a `hint` child node"
+        )],
+        "Missing prompt hint."
+      )
+    })?;
+
+    self.get_arg_string(hint)
+  }
+
+  fn get_options(
+    &self,
+    parent: &KdlNode,
+    nodes: &KdlDocument,
+  ) -> Result<Vec<String>, ManifestError> {
+    let options = nodes.get("options").ok_or_else(|| {
+      diagnostic!(
+        source = &self.source,
+        code = "arx::manifest::actions",
+        labels = vec![LabeledSpan::at(
+          parent.span().to_owned(),
+          "select prompts require the `options` child node"
+        )],
+        "Missing select prompt options."
+      )
+    })?;
+
+    let mut variants = Vec::new();
+
+    for entry in options.entries() {
+      let value = entry.value();
+      let span = entry.span().to_owned();
+
+      let value = if value.is_float_value() {
+        value.as_f64().as_ref().map(f64::to_string)
+      } else if value.is_i64_value() {
+        value.as_i64().as_ref().map(i64::to_string)
+      } else if value.is_string_value() {
+        value.as_string().map(str::to_string)
+      } else {
+        return Err(diagnostic!(
+          source = &self.source,
+          code = "arx::manifest::actions",
+          labels = vec![LabeledSpan::at(
+            span,
+            "option values can be either strings or numbers"
+          )],
+          "Invalid select option type."
+        ));
+      };
+
+      let option = value.ok_or_else(|| {
+        diagnostic!(
+          source = &self.source,
+          code = "arx::manifest::actions",
+          labels = vec![LabeledSpan::at(
+            span,
+            "failed to converted this value to a string"
+          )],
+          "Failed to convert option value."
+        )
+      })?;
+
+      variants.push(option);
+    }
+
+    Ok(variants)
+  }
+
+  fn get_default_string(&self, nodes: &KdlDocument) -> Option<String> {
+    nodes.get("default").and_then(|node| node.get_string(0))
+  }
+
+  fn get_default_bool(&self, nodes: &KdlDocument) -> Option<bool> {
+    nodes.get("default").and_then(|node| node.get_bool(0))
   }
 }

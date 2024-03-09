@@ -1,9 +1,23 @@
 use std::collections::HashMap;
+use std::io;
 
 use crossterm::style::Stylize;
+use miette::Diagnostic;
+use thiserror::Error;
 use tokio::fs;
 
 use crate::manifest::{ActionSingle, ActionSuite, Actions, Manifest};
+
+#[derive(Debug, Diagnostic, Error)]
+pub enum ExecutorError {
+  #[error("{message}")]
+  #[diagnostic(code(arx::actions::executor::io))]
+  Io {
+    message: String,
+    #[source]
+    source: io::Error,
+  },
+}
 
 /// Replacement value.
 #[derive(Debug)]
@@ -57,7 +71,7 @@ impl Executor {
   }
 
   /// Execute the actions.
-  pub async fn execute(&self) -> anyhow::Result<()> {
+  pub async fn execute(&self) -> miette::Result<()> {
     match &self.manifest.actions {
       | Actions::Suite(suites) => self.suite(suites).await?,
       | Actions::Flat(actions) => self.flat(actions).await?,
@@ -66,21 +80,28 @@ impl Executor {
 
     // Delete the config file if needed.
     if self.manifest.options.delete {
-      fs::remove_file(&self.manifest.config).await?;
+      fs::remove_file(&self.manifest.config)
+        .await
+        .map_err(|source| {
+          ExecutorError::Io {
+            message: "Failed to delete config file.".to_string(),
+            source,
+          }
+        })?;
     }
 
     Ok(())
   }
 
   /// Execute a suite of actions.
-  async fn suite(&self, suites: &[ActionSuite]) -> anyhow::Result<()> {
+  async fn suite(&self, suites: &[ActionSuite]) -> miette::Result<()> {
     let mut state = State::new();
 
     for ActionSuite { name, actions, .. } in suites {
-      let hint = "Suite:".cyan();
+      let hint = "Suite".cyan();
       let name = name.clone().green();
 
-      println!("[{hint} {name}]\n");
+      println!("[{hint}: {name}]\n");
 
       // Man, I hate how peekable iterators work in Rust.
       let mut it = actions.iter().peekable();
@@ -103,7 +124,7 @@ impl Executor {
   }
 
   /// Execute a flat list of actions.
-  async fn flat(&self, actions: &[ActionSingle]) -> anyhow::Result<()> {
+  async fn flat(&self, actions: &[ActionSingle]) -> miette::Result<()> {
     let mut state = State::new();
 
     for action in actions {
@@ -115,7 +136,7 @@ impl Executor {
   }
 
   /// Execute a single action.
-  async fn single(&self, action: &ActionSingle, state: &mut State) -> anyhow::Result<()> {
+  async fn single(&self, action: &ActionSingle, state: &mut State) -> miette::Result<()> {
     let root = &self.manifest.root;
 
     match action {

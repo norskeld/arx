@@ -40,3 +40,4 @@ Thanks to [Rich Harris][rich-harris] and his [degit] for inspiration. `:^)`
 [spec]: spec.kdl
 [degit]: https://github.com/Rich-Harris/degit
 [rich-harris]: https://github.com/Rich-Harris
+[rust-toolchain]: https://rust-lang.org/tools/install

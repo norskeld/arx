@@ -393,7 +393,6 @@ impl Config {
           name: self.get_arg_string(node)?,
           hint: self.get_hint(node, nodes)?,
           options: self.get_options(node, nodes)?,
-          default: self.get_default_string(nodes),
         }))
       },
       | "confirm" => {

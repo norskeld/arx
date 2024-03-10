@@ -37,13 +37,13 @@ pub enum RepositoryError {
 #[diagnostic(transparent)]
 pub struct ParseError(Report);
 
-#[derive(Debug, Diagnostic, Error, PartialEq)]
+#[derive(Debug, Diagnostic, Error)]
 #[diagnostic(code(arx::repository::fetch))]
 pub enum FetchError {
   #[error("Request failed.")]
   RequestFailed,
-  #[error("Repository download ({0}) failed with code {1}.")]
-  RequestFailedWithCode(String, u16),
+  #[error("Repository download failed with code {code}.\n\n{url}")]
+  RequestFailedWithCode { code: u16, url: Report },
   #[error("Couldn't get the response body as bytes.")]
   RequestBodyFailed,
 }
@@ -131,14 +131,20 @@ impl RemoteRepository {
 
     let response = reqwest::get(&url).await.map_err(|err| {
       err.status().map_or(FetchError::RequestFailed, |status| {
-        FetchError::RequestFailedWithCode(url.clone(), status.as_u16())
+        FetchError::RequestFailedWithCode {
+          code: status.as_u16(),
+          url: miette::miette!("URL: {}", url.clone()),
+        }
       })
     })?;
 
     let status = response.status();
 
     if !status.is_success() {
-      return Err(FetchError::RequestFailedWithCode(url, status.as_u16()));
+      return Err(FetchError::RequestFailedWithCode {
+        code: status.as_u16(),
+        url: miette::miette!("URL: {}", url),
+      });
     }
 
     response

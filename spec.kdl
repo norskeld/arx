@@ -52,7 +52,12 @@ actions {
     select "repo_pm" {
       hint "Package manager of choice"
       options "npm" "pnpm" "yarn" "bun"
-      default "npm"
+    }
+
+    // Number prompt. Accepts both integers and floats.
+    number "magic_number" {
+      hint "Magic number"
+      default 42
     }
 
     // If no default value provided, prompt will become required.

@@ -5,10 +5,21 @@ use std::str::FromStr;
 
 use git2::build::CheckoutBuilder;
 use git2::Repository as GitRepository;
-use miette::Diagnostic;
+use miette::{Diagnostic, LabeledSpan, Report};
 use thiserror::Error;
 
 use crate::path::Traverser;
+
+/// Helper macro to create a [ParseError] in a slightly less verbose way.
+macro_rules! parse_error {
+  ($source:ident = $code:expr, $($key:ident = $value:expr,)* $fmt:literal $($arg:tt)*) => {
+    ParseError(
+      miette::Report::from(
+        miette::diagnostic!($($key = $value,)* $fmt $($arg)*)
+      ).with_source_code($code)
+    )
+  };
+}
 
 #[derive(Debug, Diagnostic, Error)]
 pub enum RepositoryError {
@@ -21,20 +32,10 @@ pub enum RepositoryError {
   },
 }
 
-#[derive(Debug, Diagnostic, Error, PartialEq)]
-#[diagnostic(code(arx::repository::parse))]
-pub enum ParseError {
-  #[error("Host must be one of: github/gh, gitlab/gl, or bitbucket/bb.")]
-  InvalidHost,
-  #[error("Invalid user name. Only ASCII alphanumeric characters, _ and - allowed.")]
-  InvalidUserName,
-  #[error("Invalid repository name. Only ASCII alphanumeric characters, _, - and . allowed.")]
-  InvalidRepositoryName,
-  #[error("Missing repository name.")]
-  MissingRepositoryName,
-  #[error("Multiple / in the input.")]
-  MultipleSlash,
-}
+#[derive(Debug, Diagnostic, Error)]
+#[error("{0}")]
+#[diagnostic(transparent)]
+pub struct ParseError(Report);
 
 #[derive(Debug, Diagnostic, Error, PartialEq)]
 #[diagnostic(code(arx::repository::fetch))]
@@ -52,15 +53,15 @@ pub enum FetchError {
 pub enum CheckoutError {
   #[error("Failed to open the git repository.")]
   OpenFailed(git2::Error),
-  #[error("Failed to parse revision string '{0}'.")]
+  #[error("Failed to parse revision string `{0}`.")]
   RevparseFailed(String),
   #[error("Failed to checkout revision (tree).")]
   TreeCheckoutFailed,
   #[error("Reference name is not a valid UTF-8 string.")]
   InvalidRefName,
-  #[error("Failed to set HEAD to '{0}'.")]
+  #[error("Failed to set HEAD to `{0}`.")]
   SetHeadFailed(String),
-  #[error("Failed to detach HEAD to '{0}'.")]
+  #[error("Failed to detach HEAD to `{0}`.")]
   DetachHeadFailed(String),
 }
 
@@ -163,45 +164,85 @@ impl FromStr for RemoteRepository {
       is_valid_user(ch) || ch == '.'
     }
 
-    let input = input.trim();
+    let source = input.trim();
 
     // Parse host if present or use default otherwise.
-    let (host, input) = if let Some((host, rest)) = input.split_once(':') {
-      match host.to_ascii_lowercase().as_str() {
-        | "github" | "gh" => (RepositoryHost::GitHub, rest),
-        | "gitlab" | "gl" => (RepositoryHost::GitLab, rest),
-        | "bitbucket" | "bb" => (RepositoryHost::BitBucket, rest),
-        | _ => return Err(ParseError::InvalidHost),
+    let (host, (input, offset)) = if let Some((host, rest)) = source.split_once(':') {
+      let host = host.to_ascii_lowercase();
+      let next_offset = host.len() + 1;
+
+      match host.as_str() {
+        | "github" | "gh" => (RepositoryHost::GitHub, (rest, next_offset)),
+        | "gitlab" | "gl" => (RepositoryHost::GitLab, (rest, next_offset)),
+        | "bitbucket" | "bb" => (RepositoryHost::BitBucket, (rest, next_offset)),
+        | _ => {
+          return Err(parse_error!(
+            source = source.to_string(),
+            code = "arx::repository::parse",
+            labels = vec![LabeledSpan::at(
+              (0, host.len()),
+              "must be one of: github/gh, gitlab/gl, or bitbucket/bb"
+            )],
+            "Invalid host: `{host}`."
+          ));
+        },
       }
     } else {
-      (RepositoryHost::default(), input)
+      (RepositoryHost::default(), (source, 0))
     };
 
     // Parse user name.
-    let (user, input) = if let Some((user, rest)) = input.split_once('/') {
+    let (user, (input, offset)) = if let Some((user, rest)) = input.split_once('/') {
+      let next_offset = offset + user.len() + 1;
+
       if user.chars().all(is_valid_user) {
-        (user.to_string(), rest)
+        (user.to_string(), (rest, next_offset))
       } else {
-        return Err(ParseError::InvalidUserName);
+        return Err(parse_error!(
+          source = source.to_string(),
+          code = "arx::repository::parse",
+          labels = vec![LabeledSpan::at(
+            (offset, user.len()),
+            "only ASCII alphanumeric characters, _ and - allowed"
+          )],
+          "Invalid user name: `{user}`."
+        ));
       }
     } else {
-      return Err(ParseError::MissingRepositoryName);
+      return Err(ParseError(miette::miette!("Missing repository name.")));
     };
+
+    // Short-circuit if the rest of the input contains another /.
+    if let Some(slash_idx) = input.find('/') {
+      // Ensure we are not triggering false-positive in case there's a ref (after #) with a branch
+      // name containing slashes.
+      if matches!(input.find('#'), Some(hash_idx) if slash_idx < hash_idx) {
+        return Err(parse_error!(
+          source = source.to_string(),
+          code = "arx::repository::parse",
+          labels = vec![LabeledSpan::at((offset + slash_idx, 1), "remove this")],
+          "Multiple slashes in the input."
+        ));
+      }
+    }
 
     // Parse repository name.
-    let (repo, input) = if let Some((repo, rest)) = input.split_once('#') {
-      if repo.contains("//") {
-        return Err(ParseError::MultipleSlash);
-      }
+    let (repo, input) = input.split_once('#').map_or_else(
+      || (input.to_string(), None),
+      |(repo, rest)| (repo.to_string(), Some(rest)),
+    );
 
-      if repo.chars().all(is_valid_repo) {
-        (repo.to_string(), Some(rest))
-      } else {
-        return Err(ParseError::InvalidRepositoryName);
-      }
-    } else {
-      (input.to_string(), None)
-    };
+    if !repo.chars().all(is_valid_repo) {
+      return Err(parse_error!(
+        source = source.to_string(),
+        code = "arx::repository::parse",
+        labels = vec![LabeledSpan::at(
+          (offset, repo.len()),
+          "only ASCII alphanumeric characters, _, - and . allowed"
+        ),],
+        "Invalid repository name: `{repo}`."
+      ));
+    }
 
     // Produce meta if anything left from the input. Empty meta is accepted but ignored, default
     // value is used then.
@@ -344,7 +385,7 @@ mod tests {
   #[test]
   fn parse_remote_default() {
     assert_eq!(
-      RemoteRepository::from_str("foo/bar"),
+      RemoteRepository::from_str("foo/bar").map_err(|report| report.to_string()),
       Ok(RemoteRepository {
         host: RepositoryHost::GitHub,
         user: "foo".to_string(),
@@ -355,18 +396,45 @@ mod tests {
   }
 
   #[test]
-  fn parse_remote_invalid_userrepo() {
+  fn parse_remote_missing_reponame() {
     assert_eq!(
-      RemoteRepository::from_str("foo-bar"),
-      Err(ParseError::MissingRepositoryName)
+      RemoteRepository::from_str("foo-bar").map_err(|report| report.to_string()),
+      Err("Missing repository name.".to_string())
+    );
+  }
+
+  #[test]
+  fn parse_remote_invalid_username() {
+    assert_eq!(
+      RemoteRepository::from_str("foo@bar/baz").map_err(|report| report.to_string()),
+      Err("Invalid user name: `foo@bar`.".to_string())
+    );
+  }
+
+  #[test]
+  fn parse_remote_invalid_reponame() {
+    assert_eq!(
+      RemoteRepository::from_str("foo-bar/b@z").map_err(|report| report.to_string()),
+      Err("Invalid repository name: `b@z`.".to_string())
     );
   }
 
   #[test]
   fn parse_remote_invalid_host() {
     assert_eq!(
-      RemoteRepository::from_str("srht:foo/bar"),
-      Err(ParseError::InvalidHost)
+      RemoteRepository::from_str("srht:foo/bar").map_err(|report| report.to_string()),
+      Err(
+        parse_error!(
+          source = "srht:foo/bar",
+          code = "arx::repository::parse",
+          labels = vec![LabeledSpan::at(
+            (0, 5),
+            "must be one of: github/gh, gitlab/gl, or bitbucket/bb"
+          )],
+          "Invalid host: `srht`."
+        )
+        .to_string()
+      )
     );
   }
 
@@ -384,7 +452,7 @@ mod tests {
 
     for (input, meta) in cases {
       assert_eq!(
-        RemoteRepository::from_str(input),
+        RemoteRepository::from_str(input).map_err(|report| report.to_string()),
         Ok(RemoteRepository {
           host: RepositoryHost::GitHub,
           user: "foo".to_string(),
@@ -408,7 +476,7 @@ mod tests {
 
     for (input, host) in cases {
       assert_eq!(
-        RemoteRepository::from_str(input),
+        RemoteRepository::from_str(input).map_err(|report| report.to_string()),
         Ok(RemoteRepository {
           host,
           user: "foo".to_string(),
@@ -422,7 +490,7 @@ mod tests {
   #[test]
   fn test_remote_empty_meta() {
     assert_eq!(
-      RemoteRepository::from_str("foo/bar#"),
+      RemoteRepository::from_str("foo/bar#").map_err(|report| report.to_string()),
       Ok(RemoteRepository {
         host: RepositoryHost::GitHub,
         user: "foo".to_string(),
@@ -445,7 +513,7 @@ mod tests {
 
     for (input, user, repo) in cases {
       assert_eq!(
-        RemoteRepository::from_str(input),
+        RemoteRepository::from_str(input).map_err(|report| report.to_string()),
         Ok(RemoteRepository {
           host: RepositoryHost::default(),
           user: user.to_string(),

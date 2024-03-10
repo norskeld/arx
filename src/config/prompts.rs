@@ -16,8 +16,6 @@ pub struct Select {
   pub hint: String,
   /// List of options.
   pub options: Vec<String>,
-  /// Default value (if prompt was canceled).
-  pub default: Option<String>,
 }
 
 #[derive(Debug)]

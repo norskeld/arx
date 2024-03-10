@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf};
 use std::process;
-use std::thread;
-use std::time::{Duration, Instant};
 
 use crossterm::style::Stylize;
 use miette::Diagnostic;
@@ -289,7 +287,6 @@ impl Replace {
     P: AsRef<Path>,
   {
     let spinner = Spinner::new();
-    let start = Instant::now();
 
     // If no glob pattern specified, traverse all files.
     let pattern = self.glob.clone().unwrap_or("**/*".to_string());
@@ -349,14 +346,6 @@ impl Replace {
               source,
             }
           })?;
-      }
-
-      // Add artificial delay if replacements were performed too fast.
-      let elapsed = start.elapsed();
-
-      // This way we spent at least 1 second before stopping the spinner.
-      if elapsed < Duration::from_millis(750) {
-        thread::sleep(Duration::from_millis(1_000) - elapsed);
       }
 
       spinner.stop_with_message("Successfully performed replacements\n");

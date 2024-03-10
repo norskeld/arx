@@ -33,6 +33,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum BaseCommand {
   /// Scaffold from a remote repository.
+  #[command(visible_alias = "r")]
   Remote {
     /// Repository to use for scaffolding.
     src: String,
@@ -49,6 +50,7 @@ pub enum BaseCommand {
     delete: Option<bool>,
   },
   /// Scaffold from a local repository.
+  #[command(visible_alias = "l")]
   Local {
     /// Repository to use for scaffolding.
     src: String,

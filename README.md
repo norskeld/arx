@@ -10,9 +10,10 @@ Simple and user-friendly command-line tool for declarative scaffolding.
 >
 > This is an MVP.
 >
-> - [Spec] was fleshed out and implemented, but there's no thorough test coverage yet.
-> - [Spec] is thoroughly commented and temporarily serves as a reference.
+> - [Spec] was fleshed out and (mostly) implemented.
+> - [Spec] is thoroughly commented and temporarily serves as a reference/documentation.
 > - Bugs and uncovered edge cases are to be expected.
+> - Test coverage is lacking.
 
 ## Installation
 

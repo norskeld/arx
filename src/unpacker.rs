@@ -1,4 +1,5 @@
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use flate2::bufread::GzDecoder;
@@ -18,16 +19,15 @@ const USE_PERMISSIONS: bool = false;
 #[cfg(not(target_os = "windows"))]
 const USE_PERMISSIONS: bool = true;
 
-#[derive(Debug, Diagnostic, Error, PartialEq)]
+#[derive(Debug, Diagnostic, Error)]
 pub enum UnpackError {
-  #[error("Couldn't get entries from the tarball.")]
-  UnableGetEntries,
-  #[error("Couldn't get the entry's path.")]
-  UnableGetEntryPath,
-  #[error("Couldn't create the output structure.")]
-  UnableCreateStructure,
-  #[error("Couldn't unpack the entry.")]
-  UnableUnpackEntry,
+  #[error("{message}")]
+  #[diagnostic(code(arx::unpack::io))]
+  Io {
+    message: String,
+    #[source]
+    source: io::Error,
+  },
 }
 
 pub struct Unpacker {
@@ -45,24 +45,40 @@ impl Unpacker {
     let mut written_paths = Vec::new();
 
     // Get iterator over the entries.
-    let raw_entries = archive
-      .entries()
-      .map_err(|_| UnpackError::UnableGetEntries)?;
+    let raw_entries = archive.entries().map_err(|source| {
+      UnpackError::Io {
+        message: "Couldn't get entries from the tarball.".to_string(),
+        source,
+      }
+    })?;
 
     // Create output structure (if necessary).
-    fs::create_dir_all(path).map_err(|_| UnpackError::UnableCreateStructure)?;
+    fs::create_dir_all(path).map_err(|source| {
+      UnpackError::Io {
+        message: "Couldn't create the output structure.".to_string(),
+        source,
+      }
+    })?;
 
     for mut entry in raw_entries.flatten() {
-      let entry_path = entry.path().map_err(|_| UnpackError::UnableGetEntryPath)?;
+      let entry_path = entry.path().map_err(|source| {
+        UnpackError::Io {
+          message: "Couldn't get the entry's path.".to_string(),
+          source,
+        }
+      })?;
 
       let fixed_path = fix_entry_path(&entry_path, path);
 
       entry.set_preserve_permissions(USE_PERMISSIONS);
       entry.set_unpack_xattrs(USE_XATTRS);
 
-      entry
-        .unpack(&fixed_path)
-        .map_err(|_| UnpackError::UnableUnpackEntry)?;
+      entry.unpack(&fixed_path).map_err(|source| {
+        UnpackError::Io {
+          message: "Couldn't unpack the entry.".to_string(),
+          source,
+        }
+      })?;
 
       written_paths.push(fixed_path);
     }

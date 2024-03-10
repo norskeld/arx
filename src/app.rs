@@ -8,7 +8,7 @@ use miette::Diagnostic;
 use thiserror::Error;
 
 use crate::actions::Executor;
-use crate::manifest::{Manifest, ManifestOptionsOverrides};
+use crate::config::{Config, ConfigOptionsOverrides};
 use crate::repository::{LocalRepository, RemoteRepository};
 use crate::unpacker::Unpacker;
 
@@ -88,20 +88,20 @@ impl App {
       )
     }))?;
 
-    // Load the manifest.
-    let manifest = match self.cli.command {
+    // Load the config.
+    let config = match self.cli.command {
       | BaseCommand::Remote { src, path, meta, delete } => {
-        let options = ManifestOptionsOverrides { delete };
+        let options = ConfigOptionsOverrides { delete };
         Self::remote(src, path, meta, options).await?
       },
       | BaseCommand::Local { src, path, meta, delete } => {
-        let options = ManifestOptionsOverrides { delete };
+        let options = ConfigOptionsOverrides { delete };
         Self::local(src, path, meta, options).await?
       },
     };
 
     // Create executor and kick off execution.
-    let executor = Executor::new(manifest);
+    let executor = Executor::new(config);
     executor.execute().await?;
 
     Ok(())
@@ -112,8 +112,8 @@ impl App {
     src: String,
     path: Option<String>,
     meta: Option<String>,
-    overrides: ManifestOptionsOverrides,
-  ) -> miette::Result<Manifest> {
+    overrides: ConfigOptionsOverrides,
+  ) -> miette::Result<Config> {
     // Parse repository.
     let remote = RemoteRepository::new(src, meta)?;
 
@@ -135,13 +135,13 @@ impl App {
     let unpacker = Unpacker::new(tarball);
     unpacker.unpack_to(&destination)?;
 
-    // Now we need to read the manifest (if it is present).
-    let mut manifest = Manifest::new(&destination);
+    // Now we need to read the config (if it is present).
+    let mut config = Config::new(&destination);
 
-    manifest.load()?;
-    manifest.override_with(overrides);
+    config.load()?;
+    config.override_with(overrides);
 
-    Ok(manifest)
+    Ok(config)
   }
 
   /// Preparation flow for local repositories.
@@ -149,8 +149,8 @@ impl App {
     src: String,
     path: Option<String>,
     meta: Option<String>,
-    overrides: ManifestOptionsOverrides,
-  ) -> miette::Result<Manifest> {
+    overrides: ConfigOptionsOverrides,
+  ) -> miette::Result<Config> {
     // Create repository.
     let local = LocalRepository::new(src, meta);
 
@@ -196,13 +196,13 @@ impl App {
       println!("{}", "~ Removed inner .git directory\n".dim());
     }
 
-    // Now we need to read the manifest (if it is present).
-    let mut manifest = Manifest::new(&destination);
+    // Now we need to read the config (if it is present).
+    let mut config = Config::new(&destination);
 
-    manifest.load()?;
-    manifest.override_with(overrides);
+    config.load()?;
+    config.override_with(overrides);
 
-    Ok(manifest)
+    Ok(config)
   }
 }
 

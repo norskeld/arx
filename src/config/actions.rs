@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::manifest::prompts::*;
+use crate::config::prompts::*;
 
 /// Copies a file or directory. Glob-friendly. Overwrites by default.
 #[derive(Debug)]

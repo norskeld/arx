@@ -6,7 +6,7 @@ use miette::Diagnostic;
 use thiserror::Error;
 use tokio::fs;
 
-use crate::manifest::{ActionSingle, ActionSuite, Actions, Manifest};
+use crate::config::{ActionSingle, ActionSuite, Actions, Config};
 
 #[derive(Debug, Diagnostic, Error)]
 pub enum ExecutorError {
@@ -60,27 +60,27 @@ impl Default for State {
 /// An executor.
 #[derive(Debug)]
 pub struct Executor {
-  /// The manifest to use for execution.
-  manifest: Manifest,
+  /// The config to use for execution.
+  config: Config,
 }
 
 impl Executor {
   /// Create a new executor.
-  pub fn new(manifest: Manifest) -> Self {
-    Self { manifest }
+  pub fn new(config: Config) -> Self {
+    Self { config }
   }
 
   /// Execute the actions.
   pub async fn execute(&self) -> miette::Result<()> {
-    match &self.manifest.actions {
+    match &self.config.actions {
       | Actions::Suite(suites) => self.suite(suites).await?,
       | Actions::Flat(actions) => self.flat(actions).await?,
       | Actions::Empty => println!("No actions found."),
     };
 
     // Delete the config file if needed.
-    if self.manifest.options.delete {
-      fs::remove_file(&self.manifest.config)
+    if self.config.options.delete {
+      fs::remove_file(&self.config.config)
         .await
         .map_err(|source| {
           ExecutorError::Io {
@@ -137,7 +137,7 @@ impl Executor {
 
   /// Execute a single action.
   async fn single(&self, action: &ActionSingle, state: &mut State) -> miette::Result<()> {
-    let root = &self.manifest.root;
+    let root = &self.config.root;
 
     match action {
       | ActionSingle::Copy(action) => action.execute(root).await,

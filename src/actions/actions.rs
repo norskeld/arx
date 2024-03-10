@@ -12,7 +12,7 @@ use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use unindent::Unindent;
 
 use crate::actions::{State, Value};
-use crate::manifest::actions::*;
+use crate::config::actions::*;
 use crate::path::{PathClean, Traverser};
 use crate::spinner::Spinner;
 

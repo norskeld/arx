@@ -8,7 +8,7 @@ use inquire::ui::{Color, RenderConfig, StyleSheet, Styled};
 use inquire::{Confirm, Editor, InquireError, Select, Text};
 
 use crate::actions::{State, Value};
-use crate::manifest::prompts;
+use crate::config::prompts;
 
 /// Helper struct holding useful static methods.
 struct Inquirer;

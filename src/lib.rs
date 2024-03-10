@@ -2,7 +2,7 @@
 
 pub(crate) mod actions;
 pub mod app;
-pub(crate) mod manifest;
+pub(crate) mod config;
 pub(crate) mod path;
 pub(crate) mod repository;
 pub(crate) mod spinner;

@@ -289,7 +289,8 @@ impl Config {
         else {
           Err(ConfigError::Diagnostic(miette::miette!(
             code = "arx::config::actions",
-            "You can use either suites of actions or a flat list of single actions, not both."
+            "You can use either suites of actions or a flat list of single actions. \
+             Right now you have a mix of both."
           )))
         }
       });

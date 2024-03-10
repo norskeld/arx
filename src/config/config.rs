@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -340,34 +341,18 @@ impl Config {
       | "rm" => ActionSingle::Delete(Delete { target: self.get_arg_string(node)? }),
       // Actions for running commands and echoing output.
       | "echo" => {
-        let message = self.get_arg_string(node)?;
-
-        // TODO: Verify injects have valid type (string values).
-        let injects = node.children().map(|children| {
-          children
-            .get_args("inject")
-            .into_iter()
-            .filter_map(|arg| arg.as_string().map(str::to_string))
-            .collect()
-        });
-
-        let trim = node.get_bool("trim").unwrap_or(true);
-
-        ActionSingle::Echo(Echo { message, injects, trim })
+        ActionSingle::Echo(Echo {
+          message: self.get_arg_string(node)?,
+          injects: self.get_injects(node),
+          trim: node.get_bool("trim").unwrap_or(true),
+        })
       },
       | "run" => {
-        let name = node.get_string("name");
-        let command = self.get_arg_string(node)?;
-
-        let injects = node.children().map(|children| {
-          children
-            .get_args("inject")
-            .into_iter()
-            .filter_map(|arg| arg.as_string().map(str::to_string))
-            .collect()
-        });
-
-        ActionSingle::Run(Run { name, command, injects })
+        ActionSingle::Run(Run {
+          name: node.get_string("name"),
+          command: self.get_arg_string(node)?,
+          injects: self.get_injects(node),
+        })
       },
       // Actions for prompts and replacements.
       | "input" => {
@@ -474,13 +459,13 @@ impl Config {
     node: &'kdl KdlNode,
     nodes: Vec<&str>,
   ) -> Result<&'kdl KdlDocument, ConfigError> {
-    let suffix = if nodes.len() > 1 { "s" } else { "" };
     let nodes = nodes
       .iter()
       .map(|node| format!("`{node}`"))
       .collect::<Vec<_>>()
       .join(", ");
 
+    let suffix = if nodes.len() > 1 { "s" } else { "" };
     let message = format!("Missing required child node{suffix}: {nodes}.");
 
     node.children().ok_or_else(|| {
@@ -510,6 +495,16 @@ impl Config {
     })?;
 
     self.get_arg_string(hint)
+  }
+
+  fn get_injects(&self, node: &KdlNode) -> Option<HashSet<String>> {
+    node.children().map(|children| {
+      children
+        .get_args("inject")
+        .into_iter()
+        .filter_map(|arg| arg.as_string().map(str::to_string))
+        .collect()
+    })
   }
 
   fn get_options(&self, parent: &KdlNode, nodes: &KdlDocument) -> Result<Vec<String>, ConfigError> {

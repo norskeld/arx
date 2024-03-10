@@ -1,9 +1,9 @@
 use std::fs;
-use std::io::Error as IoError;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use kdl::{KdlDocument, KdlError, KdlNode};
+use kdl::{KdlDocument, KdlNode};
 use miette::{Diagnostic, LabeledSpan, NamedSource, Report};
 use thiserror::Error;
 
@@ -31,12 +31,12 @@ pub enum ManifestError {
   Io {
     message: String,
     #[source]
-    source: IoError,
+    source: io::Error,
   },
 
   #[error(transparent)]
   #[diagnostic(transparent)]
-  Kdl(KdlError),
+  Kdl(kdl::KdlError),
 
   #[error("{0}")]
   #[diagnostic(transparent)]

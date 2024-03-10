@@ -3,12 +3,13 @@ use std::process;
 
 use crossterm::style::Stylize;
 use inquire::formatter::StringFormatter;
-use inquire::required;
 use inquire::ui::{Color, RenderConfig, StyleSheet, Styled};
+use inquire::{required, CustomType};
 use inquire::{Confirm, Editor, InquireError, Select, Text};
 
-use crate::actions::{State, Value};
-use crate::config::prompts;
+use crate::actions::State;
+use crate::config::prompts::*;
+use crate::config::{Number, Value};
 
 /// Helper module holding useful functions.
 mod helpers {
@@ -52,7 +53,7 @@ mod helpers {
   }
 
   /// Handle interruption/cancelation events.
-  pub fn handle_interruption(err: InquireError) {
+  pub fn interrupt(err: InquireError) {
     match err {
       | InquireError::OperationCanceled => {
         process::exit(0);
@@ -66,7 +67,7 @@ mod helpers {
   }
 }
 
-impl prompts::Confirm {
+impl ConfirmPrompt {
   /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = helpers::messages(&self.name, &self.hint);
@@ -81,14 +82,14 @@ impl prompts::Confirm {
 
     match prompt.prompt() {
       | Ok(value) => state.set(name, Value::Bool(value)),
-      | Err(err) => helpers::handle_interruption(err),
+      | Err(err) => helpers::interrupt(err),
     }
 
     Ok(())
   }
 }
 
-impl prompts::Input {
+impl InputPrompt {
   /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = helpers::messages(&self.name, &self.hint);
@@ -106,14 +107,41 @@ impl prompts::Input {
 
     match prompt.prompt() {
       | Ok(value) => state.set(name, Value::String(value)),
-      | Err(err) => helpers::handle_interruption(err),
+      | Err(err) => helpers::interrupt(err),
     }
 
     Ok(())
   }
 }
 
-impl prompts::Select {
+impl NumberPrompt {
+  /// Execute the prompt and populate the state.
+  pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
+    let (name, hint, help) = helpers::messages(&self.name, &self.hint);
+
+    let mut prompt = CustomType::<Number>::new(&hint)
+      .with_help_message(&help)
+      .with_formatter(&|input| input.to_string())
+      .with_render_config(helpers::theme());
+
+    if let Some(default) = &self.default {
+      prompt = prompt.with_default(default.to_owned());
+    } else {
+      // NOTE: This is a bit confusing, but essentially this message will be showed when no input
+      // was provided by the user.
+      prompt = prompt.with_error_message("This field is required.");
+    }
+
+    match prompt.prompt() {
+      | Ok(value) => state.set(name, Value::Number(value)),
+      | Err(err) => helpers::interrupt(err),
+    }
+
+    Ok(())
+  }
+}
+
+impl SelectPrompt {
   /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = helpers::messages(&self.name, &self.hint);
@@ -126,14 +154,14 @@ impl prompts::Select {
 
     match prompt.prompt() {
       | Ok(value) => state.set(name, Value::String(value)),
-      | Err(err) => helpers::handle_interruption(err),
+      | Err(err) => helpers::interrupt(err),
     }
 
     Ok(())
   }
 }
 
-impl prompts::Editor {
+impl EditorPrompt {
   /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = helpers::messages(&self.name, &self.hint);
@@ -148,7 +176,7 @@ impl prompts::Editor {
 
     match prompt.prompt() {
       | Ok(value) => state.set(name, Value::String(value)),
-      | Err(err) => helpers::handle_interruption(err),
+      | Err(err) => helpers::interrupt(err),
     }
 
     Ok(())

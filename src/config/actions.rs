@@ -77,10 +77,11 @@ pub struct Run {
 /// Prompt actions.
 #[derive(Debug)]
 pub enum Prompt {
-  Input(Input),
-  Select(Select),
-  Confirm(Confirm),
-  Editor(Editor),
+  Input(InputPrompt),
+  Number(NumberPrompt),
+  Select(SelectPrompt),
+  Confirm(ConfirmPrompt),
+  Editor(EditorPrompt),
 }
 
 /// Execute given replacements using values provided by prompts. Optionally, only apply

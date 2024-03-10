@@ -11,8 +11,9 @@ use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use unindent::Unindent;
 
-use crate::actions::{State, Value};
+use crate::actions::State;
 use crate::config::actions::*;
+use crate::config::value::*;
 use crate::path::{PathClean, Traverser};
 use crate::spinner::Spinner;
 
@@ -274,9 +275,10 @@ impl Prompt {
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     match self {
       | Self::Confirm(prompt) => prompt.execute(state).await,
-      | Self::Input(prompt) => prompt.execute(state).await,
-      | Self::Select(prompt) => prompt.execute(state).await,
       | Self::Editor(prompt) => prompt.execute(state).await,
+      | Self::Input(prompt) => prompt.execute(state).await,
+      | Self::Number(prompt) => prompt.execute(state).await,
+      | Self::Select(prompt) => prompt.execute(state).await,
     }
   }
 }

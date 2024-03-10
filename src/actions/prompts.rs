@@ -10,10 +10,10 @@ use inquire::{Confirm, Editor, InquireError, Select, Text};
 use crate::actions::{State, Value};
 use crate::config::prompts;
 
-/// Helper struct holding useful static methods.
-struct Inquirer;
+/// Helper module holding useful functions.
+mod helpers {
+  use super::*;
 
-impl Inquirer {
   /// Returns configured theme.
   pub fn theme<'r>() -> RenderConfig<'r> {
     let default = RenderConfig::default();
@@ -69,11 +69,11 @@ impl Inquirer {
 impl prompts::Confirm {
   /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
-    let (name, hint, help) = Inquirer::messages(&self.name, &self.hint);
+    let (name, hint, help) = helpers::messages(&self.name, &self.hint);
 
     let mut prompt = Confirm::new(&hint)
       .with_help_message(&help)
-      .with_render_config(Inquirer::theme());
+      .with_render_config(helpers::theme());
 
     if let Some(default) = self.default {
       prompt = prompt.with_default(default);
@@ -81,7 +81,7 @@ impl prompts::Confirm {
 
     match prompt.prompt() {
       | Ok(value) => state.set(name, Value::Bool(value)),
-      | Err(err) => Inquirer::handle_interruption(err),
+      | Err(err) => helpers::handle_interruption(err),
     }
 
     Ok(())
@@ -91,12 +91,12 @@ impl prompts::Confirm {
 impl prompts::Input {
   /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
-    let (name, hint, help) = Inquirer::messages(&self.name, &self.hint);
+    let (name, hint, help) = helpers::messages(&self.name, &self.hint);
 
     let mut prompt = Text::new(&hint)
       .with_help_message(&help)
-      .with_formatter(Inquirer::empty_formatter())
-      .with_render_config(Inquirer::theme());
+      .with_formatter(helpers::empty_formatter())
+      .with_render_config(helpers::theme());
 
     if let Some(default) = &self.default {
       prompt = prompt.with_default(default);
@@ -106,7 +106,7 @@ impl prompts::Input {
 
     match prompt.prompt() {
       | Ok(value) => state.set(name, Value::String(value)),
-      | Err(err) => Inquirer::handle_interruption(err),
+      | Err(err) => helpers::handle_interruption(err),
     }
 
     Ok(())
@@ -116,17 +116,17 @@ impl prompts::Input {
 impl prompts::Select {
   /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
-    let (name, hint, help) = Inquirer::messages(&self.name, &self.hint);
+    let (name, hint, help) = helpers::messages(&self.name, &self.hint);
 
     let options = self.options.iter().map(String::to_string).collect();
 
     let prompt = Select::new(&hint, options)
       .with_help_message(&help)
-      .with_render_config(Inquirer::theme());
+      .with_render_config(helpers::theme());
 
     match prompt.prompt() {
       | Ok(value) => state.set(name, Value::String(value)),
-      | Err(err) => Inquirer::handle_interruption(err),
+      | Err(err) => helpers::handle_interruption(err),
     }
 
     Ok(())
@@ -136,11 +136,11 @@ impl prompts::Select {
 impl prompts::Editor {
   /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
-    let (name, hint, help) = Inquirer::messages(&self.name, &self.hint);
+    let (name, hint, help) = helpers::messages(&self.name, &self.hint);
 
     let mut prompt = Editor::new(&hint)
       .with_help_message(&help)
-      .with_render_config(Inquirer::theme());
+      .with_render_config(helpers::theme());
 
     if let Some(default) = &self.default {
       prompt = prompt.with_predefined_text(default);
@@ -148,7 +148,7 @@ impl prompts::Editor {
 
     match prompt.prompt() {
       | Ok(value) => state.set(name, Value::String(value)),
-      | Err(err) => Inquirer::handle_interruption(err),
+      | Err(err) => helpers::handle_interruption(err),
     }
 
     Ok(())

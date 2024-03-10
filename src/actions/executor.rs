@@ -6,7 +6,7 @@ use miette::Diagnostic;
 use thiserror::Error;
 use tokio::fs;
 
-use crate::config::{ActionSingle, ActionSuite, Actions, Config};
+use crate::config::{ActionSingle, ActionSuite, Actions, Config, Value};
 
 #[derive(Debug, Diagnostic, Error)]
 pub enum ExecutorError {
@@ -17,15 +17,6 @@ pub enum ExecutorError {
     #[source]
     source: io::Error,
   },
-}
-
-/// Replacement value.
-#[derive(Debug)]
-pub enum Value {
-  /// A string value.
-  String(String),
-  /// A boolean value.
-  Bool(bool),
 }
 
 #[derive(Debug)]

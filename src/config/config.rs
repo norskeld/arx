@@ -9,6 +9,7 @@ use thiserror::Error;
 
 use crate::config::actions::*;
 use crate::config::prompts::*;
+use crate::config::value::*;
 use crate::config::KdlUtils;
 
 const CONFIG_NAME: &str = "arx.kdl";
@@ -371,16 +372,25 @@ impl Config {
       | "input" => {
         let nodes = self.get_children(node, vec!["hint"])?;
 
-        ActionSingle::Prompt(Prompt::Input(Input {
+        ActionSingle::Prompt(Prompt::Input(InputPrompt {
           name: self.get_arg_string(node)?,
           hint: self.get_hint(node, nodes)?,
           default: self.get_default_string(nodes),
         }))
       },
+      | "number" => {
+        let nodes = self.get_children(node, vec!["hint"])?;
+
+        ActionSingle::Prompt(Prompt::Number(NumberPrompt {
+          name: self.get_arg_string(node)?,
+          hint: self.get_hint(node, nodes)?,
+          default: self.get_default_number(nodes),
+        }))
+      },
       | "editor" => {
         let nodes = self.get_children(node, vec!["hint"])?;
 
-        ActionSingle::Prompt(Prompt::Editor(Editor {
+        ActionSingle::Prompt(Prompt::Editor(EditorPrompt {
           name: self.get_arg_string(node)?,
           hint: self.get_hint(node, nodes)?,
           default: self.get_default_string(nodes),
@@ -389,7 +399,7 @@ impl Config {
       | "select" => {
         let nodes = self.get_children(node, vec!["hint", "options"])?;
 
-        ActionSingle::Prompt(Prompt::Select(Select {
+        ActionSingle::Prompt(Prompt::Select(SelectPrompt {
           name: self.get_arg_string(node)?,
           hint: self.get_hint(node, nodes)?,
           options: self.get_options(node, nodes)?,
@@ -398,7 +408,7 @@ impl Config {
       | "confirm" => {
         let nodes = self.get_children(node, vec!["hint"])?;
 
-        ActionSingle::Prompt(Prompt::Confirm(Confirm {
+        ActionSingle::Prompt(Prompt::Confirm(ConfirmPrompt {
           name: self.get_arg_string(node)?,
           hint: self.get_hint(node, nodes)?,
           default: self.get_default_bool(nodes),
@@ -562,5 +572,9 @@ impl Config {
 
   fn get_default_bool(&self, nodes: &KdlDocument) -> Option<bool> {
     nodes.get("default").and_then(|node| node.get_bool(0))
+  }
+
+  fn get_default_number(&self, nodes: &KdlDocument) -> Option<Number> {
+    nodes.get("default").and_then(|node| node.get_number(0))
   }
 }

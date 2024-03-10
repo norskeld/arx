@@ -1,8 +1,8 @@
-pub use manifest::*;
+pub use config::*;
 pub use utils::*;
 
 pub mod actions;
 pub mod prompts;
 
-mod manifest;
+mod config;
 mod utils;

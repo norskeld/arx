@@ -7,16 +7,16 @@ use kdl::{KdlDocument, KdlNode};
 use miette::{Diagnostic, LabeledSpan, NamedSource, Report};
 use thiserror::Error;
 
-use crate::manifest::actions::*;
-use crate::manifest::prompts::*;
-use crate::manifest::KdlUtils;
+use crate::config::actions::*;
+use crate::config::prompts::*;
+use crate::config::KdlUtils;
 
-const MANIFEST_NAME: &str = "arx.kdl";
+const CONFIG_NAME: &str = "arx.kdl";
 
-/// Helper macro to create a [ManifestError::Diagnostic] in a slightly less verbose way.
+/// Helper macro to create a [ConfigError::Diagnostic] in a slightly less verbose way.
 macro_rules! diagnostic {
   ($source:ident = $code:expr, $($key:ident = $value:expr,)* $fmt:literal $($arg:tt)*) => {
-    ManifestError::Diagnostic(
+    ConfigError::Diagnostic(
       miette::Report::from(
         miette::diagnostic!($($key = $value,)* $fmt $($arg)*)
       ).with_source_code(Arc::clone($code))
@@ -25,9 +25,9 @@ macro_rules! diagnostic {
 }
 
 #[derive(Debug, Diagnostic, Error)]
-pub enum ManifestError {
+pub enum ConfigError {
   #[error("{message}")]
-  #[diagnostic(code(arx::manifest::io))]
+  #[diagnostic(code(arx::config::io))]
   Io {
     message: String,
     #[source]
@@ -43,27 +43,27 @@ pub enum ManifestError {
   Diagnostic(Report),
 }
 
-/// Manifest options. These may be overriden from the CLI.
+/// Config options. These may be overriden from the CLI.
 #[derive(Debug)]
-pub struct ManifestOptions {
-  /// Whether to delete the manifest after we (successfully) done running.
+pub struct ConfigOptions {
+  /// Whether to delete the config after we (successfully) done running.
   pub delete: bool,
 }
 
-impl Default for ManifestOptions {
+impl Default for ConfigOptions {
   fn default() -> Self {
     Self { delete: true }
   }
 }
 
-/// Manifest options that may override parsed options.
+/// Config options that may override parsed options.
 #[derive(Debug, Default)]
-pub struct ManifestOptionsOverrides {
-  /// Whether to delete the manifest after we (successfully) done running.
+pub struct ConfigOptionsOverrides {
+  /// Whether to delete the config after we (successfully) done running.
   pub delete: Option<bool>,
 }
 
-/// Represents a manifest actions set that can be a vec of [ActionSuite] *or* [ActionSingle].
+/// Represents a config actions set that can be a vec of [ActionSuite] *or* [ActionSingle].
 ///
 /// So, actions should be defined either like this:
 ///
@@ -122,26 +122,26 @@ pub enum ActionSingle {
   Unknown(Unknown),
 }
 
-/// Arx manifest (config).
+/// Arx config.
 #[derive(Debug)]
-pub struct Manifest {
-  /// Manifest directory.
+pub struct Config {
+  /// Config directory.
   pub root: PathBuf,
   /// Source. Wrapped in an [Arc] for cheap clones.
   pub source: Arc<NamedSource>,
-  /// Manifest file path.
+  /// Config file path.
   pub config: PathBuf,
-  /// Manifest options.
-  pub options: ManifestOptions,
+  /// Config options.
+  pub options: ConfigOptions,
   /// Actions.
   pub actions: Actions,
 }
 
-impl Manifest {
-  /// Creates a new manifest from the given path and options.
+impl Config {
+  /// Creates a new config from the given path and options.
   pub fn new(root: &Path) -> Self {
     let root = root.to_path_buf();
-    let config = root.join(MANIFEST_NAME);
+    let config = root.join(CONFIG_NAME);
 
     // NOTE: Creating dummy source first, will be overwritten with actual data on load. This is done
     // because of some limitations around `NamedSource` and related entities like `SourceCode` which
@@ -153,48 +153,48 @@ impl Manifest {
 
     Self {
       config,
-      options: ManifestOptions::default(),
+      options: ConfigOptions::default(),
       actions: Actions::Empty,
       source,
       root,
     }
   }
 
-  /// Tries to apply the given overrides to the manifest options.
-  pub fn override_with(&mut self, overrides: ManifestOptionsOverrides) {
+  /// Tries to apply the given overrides to the config options.
+  pub fn override_with(&mut self, overrides: ConfigOptionsOverrides) {
     if let Some(delete) = overrides.delete {
       self.options.delete = delete;
     }
   }
 
-  /// Tries to load and parse the manifest.
-  pub fn load(&mut self) -> Result<(), ManifestError> {
+  /// Tries to load and parse the config.
+  pub fn load(&mut self) -> Result<(), ConfigError> {
     if self.exists() {
       let doc = self.parse()?;
-      self.options = self.get_manifest_options(&doc)?;
-      self.actions = self.get_manifest_actions(&doc)?;
+      self.options = self.get_config_options(&doc)?;
+      self.actions = self.get_config_actions(&doc)?;
     }
 
     Ok(())
   }
 
-  /// Checks if the manifest exists under `self.root`.
+  /// Checks if the config exists under `self.root`.
   fn exists(&self) -> bool {
     self.config.try_exists().unwrap_or(false)
   }
 
-  /// Reads and parses the manifest into a [KdlDocument].
-  fn parse(&mut self) -> Result<KdlDocument, ManifestError> {
-    let filename = self.root.join(MANIFEST_NAME);
+  /// Reads and parses the config into a [KdlDocument].
+  fn parse(&mut self) -> Result<KdlDocument, ConfigError> {
+    let filename = self.root.join(CONFIG_NAME);
 
     let contents = fs::read_to_string(&filename).map_err(|source| {
-      ManifestError::Io {
-        message: "Failed to read the manifest.".to_string(),
+      ConfigError::Io {
+        message: "Failed to read the config.".to_string(),
         source,
       }
     })?;
 
-    let document = contents.parse().map_err(ManifestError::Kdl)?;
+    let document = contents.parse().map_err(ConfigError::Kdl)?;
 
     // Replace dummy source with actual data.
     self.source = Arc::new(NamedSource::new(filename.display().to_string(), contents));
@@ -202,14 +202,14 @@ impl Manifest {
     Ok(document)
   }
 
-  /// Tries to parse options from the manifest.
-  fn get_manifest_options(&self, doc: &KdlDocument) -> Result<ManifestOptions, ManifestError> {
+  /// Tries to parse options from the config.
+  fn get_config_options(&self, doc: &KdlDocument) -> Result<ConfigOptions, ConfigError> {
     let options = doc
       .get("options")
       .and_then(KdlNode::children)
       .map(|children| {
         let nodes = children.nodes();
-        let mut defaults = ManifestOptions::default();
+        let mut defaults = ConfigOptions::default();
 
         for node in nodes {
           let option = node.name().to_string().to_ascii_lowercase();
@@ -219,7 +219,7 @@ impl Manifest {
               defaults.delete = node.get_bool(0).ok_or_else(|| {
                 diagnostic!(
                   source = &self.source,
-                  code = "arx::manifest::options",
+                  code = "arx::config::options",
                   labels = vec![LabeledSpan::at(
                     node.span().to_owned(),
                     "this node requires a boolean argument"
@@ -240,12 +240,12 @@ impl Manifest {
     match options {
       | Some(Ok(options)) => Ok(options),
       | Some(Err(err)) => Err(err),
-      | None => Ok(ManifestOptions::default()),
+      | None => Ok(ConfigOptions::default()),
     }
   }
 
-  /// Tries to parse actions from the manifest.
-  fn get_manifest_actions(&self, doc: &KdlDocument) -> Result<Actions, ManifestError> {
+  /// Tries to parse actions from the config.
+  fn get_config_actions(&self, doc: &KdlDocument) -> Result<Actions, ConfigError> {
     #[inline]
     fn is_suite(node: &KdlNode) -> bool {
       node.name().value() == "suite"
@@ -286,8 +286,8 @@ impl Manifest {
         }
         // Otherwise we have invalid actions block.
         else {
-          Err(ManifestError::Diagnostic(miette::miette!(
-            code = "arx::manifest::actions",
+          Err(ConfigError::Diagnostic(miette::miette!(
+            code = "arx::config::actions",
             "You can use either suites of actions or a flat list of single actions, not both."
           )))
         }
@@ -300,7 +300,7 @@ impl Manifest {
     }
   }
 
-  fn get_action_suite(&self, node: &KdlNode) -> Result<ActionSuite, ManifestError> {
+  fn get_action_suite(&self, node: &KdlNode) -> Result<ActionSuite, ConfigError> {
     let mut actions = Vec::new();
 
     // Fail if we stumbled upon a nameless suite.
@@ -316,7 +316,7 @@ impl Manifest {
     Ok(ActionSuite { name, actions })
   }
 
-  fn get_action_single(&self, node: &KdlNode) -> Result<ActionSingle, ManifestError> {
+  fn get_action_single(&self, node: &KdlNode) -> Result<ActionSingle, ConfigError> {
     let kind = node.name().to_string().to_ascii_lowercase();
 
     let action = match kind.as_str() {
@@ -428,14 +428,14 @@ impl Manifest {
     Ok(action)
   }
 
-  fn get_arg_string(&self, node: &KdlNode) -> Result<String, ManifestError> {
+  fn get_arg_string(&self, node: &KdlNode) -> Result<String, ConfigError> {
     let start = node.span().offset();
     let end = start + node.name().len();
 
     node.get_string(0).ok_or_else(|| {
       diagnostic!(
         source = &self.source,
-        code = "arx::manifest::actions",
+        code = "arx::config::actions",
         labels = vec![
           LabeledSpan::at(start..end, "this node requires a string argument"),
           LabeledSpan::at_offset(end, "argument should be here")
@@ -445,11 +445,11 @@ impl Manifest {
     })
   }
 
-  fn get_attr_string(&self, node: &KdlNode, key: &str) -> Result<String, ManifestError> {
+  fn get_attr_string(&self, node: &KdlNode, key: &str) -> Result<String, ConfigError> {
     node.get_string(key).ok_or_else(|| {
       diagnostic!(
         source = &self.source,
-        code = "arx::manifest::actions",
+        code = "arx::config::actions",
         labels = vec![LabeledSpan::at(
           node.span().to_owned(),
           format!("this node requires the `{key}` attribute")
@@ -463,7 +463,7 @@ impl Manifest {
     &self,
     node: &'kdl KdlNode,
     nodes: Vec<&str>,
-  ) -> Result<&'kdl KdlDocument, ManifestError> {
+  ) -> Result<&'kdl KdlDocument, ConfigError> {
     let suffix = if nodes.len() > 1 { "s" } else { "" };
     let nodes = nodes
       .iter()
@@ -476,7 +476,7 @@ impl Manifest {
     node.children().ok_or_else(|| {
       diagnostic!(
         source = &self.source,
-        code = "arx::manifest::actions",
+        code = "arx::config::actions",
         labels = vec![LabeledSpan::at(
           node.span().to_owned(),
           format!("this node requires the following child nodes: {nodes}")
@@ -486,11 +486,11 @@ impl Manifest {
     })
   }
 
-  fn get_hint(&self, parent: &KdlNode, nodes: &KdlDocument) -> Result<String, ManifestError> {
+  fn get_hint(&self, parent: &KdlNode, nodes: &KdlDocument) -> Result<String, ConfigError> {
     let hint = nodes.get("hint").ok_or_else(|| {
       diagnostic!(
         source = &self.source,
-        code = "arx::manifest::actions",
+        code = "arx::config::actions",
         labels = vec![LabeledSpan::at(
           parent.span().to_owned(),
           "prompts require a `hint` child node"
@@ -502,15 +502,11 @@ impl Manifest {
     self.get_arg_string(hint)
   }
 
-  fn get_options(
-    &self,
-    parent: &KdlNode,
-    nodes: &KdlDocument,
-  ) -> Result<Vec<String>, ManifestError> {
+  fn get_options(&self, parent: &KdlNode, nodes: &KdlDocument) -> Result<Vec<String>, ConfigError> {
     let options = nodes.get("options").ok_or_else(|| {
       diagnostic!(
         source = &self.source,
-        code = "arx::manifest::actions",
+        code = "arx::config::actions",
         labels = vec![LabeledSpan::at(
           parent.span().to_owned(),
           "select prompts require the `options` child node"
@@ -534,7 +530,7 @@ impl Manifest {
       } else {
         return Err(diagnostic!(
           source = &self.source,
-          code = "arx::manifest::actions",
+          code = "arx::config::actions",
           labels = vec![LabeledSpan::at(
             span,
             "option values can be either strings or numbers"
@@ -546,7 +542,7 @@ impl Manifest {
       let option = value.ok_or_else(|| {
         diagnostic!(
           source = &self.source,
-          code = "arx::manifest::actions",
+          code = "arx::config::actions",
           labels = vec![LabeledSpan::at(
             span,
             "failed to converted this value to a string"

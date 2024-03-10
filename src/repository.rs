@@ -10,7 +10,19 @@ use thiserror::Error;
 
 use crate::path::Traverser;
 
+#[derive(Debug, Diagnostic, Error)]
+pub enum RepositoryError {
+  #[error("{message}")]
+  #[diagnostic(code(arx::repository::io))]
+  Io {
+    message: String,
+    #[source]
+    source: io::Error,
+  },
+}
+
 #[derive(Debug, Diagnostic, Error, PartialEq)]
+#[diagnostic(code(arx::repository::parse))]
 pub enum ParseError {
   #[error("Host must be one of: github/gh, gitlab/gl, or bitbucket/bb.")]
   InvalidHost,
@@ -25,6 +37,7 @@ pub enum ParseError {
 }
 
 #[derive(Debug, Diagnostic, Error, PartialEq)]
+#[diagnostic(code(arx::repository::fetch))]
 pub enum FetchError {
   #[error("Request failed.")]
   RequestFailed,
@@ -35,14 +48,7 @@ pub enum FetchError {
 }
 
 #[derive(Debug, Diagnostic, Error)]
-pub enum CopyError {
-  #[error("Failed to create directory.")]
-  CreateDirFailed(io::Error),
-  #[error("Failed to copy file.")]
-  CopyFailed(io::Error),
-}
-
-#[derive(Debug, Diagnostic, Error)]
+#[diagnostic(code(arx::repository::checkout))]
 pub enum CheckoutError {
   #[error("Failed to open the git repository.")]
   OpenFailed(git2::Error),
@@ -227,7 +233,7 @@ impl LocalRepository {
   }
 
   /// Copies the repository into the `destination` directory.
-  pub fn copy(&self, destination: &Path) -> Result<(), CopyError> {
+  pub fn copy(&self, destination: &Path) -> Result<(), RepositoryError> {
     let traverser = Traverser::new(self.source.to_owned())
       .pattern("**/*")
       .ignore_dirs(true)
@@ -237,8 +243,26 @@ impl LocalRepository {
       let target = destination.join(&matched.captured);
 
       if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent).map_err(CopyError::CreateDirFailed)?;
-        fs::copy(matched.path, &target).map_err(CopyError::CopyFailed)?;
+        fs::create_dir_all(parent).map_err(|source| {
+          RepositoryError::Io {
+            message: format!(
+              "Failed to create directory structure for '{}'.",
+              parent.display()
+            ),
+            source,
+          }
+        })?;
+
+        fs::copy(&matched.path, &target).map_err(|source| {
+          RepositoryError::Io {
+            message: format!(
+              "Failed to copy from '{}' to '{}'.",
+              matched.path.display(),
+              target.display()
+            ),
+            source,
+          }
+        })?;
       }
     }
 

@@ -103,7 +103,6 @@ actions {
   // Note:
   //
   // - Paths don't expand, i.e. ~ won't expand to the home directory and env vars won't work either.
-  // - Paths don't escape the target directory, so delete "../../../**/*" won't work.
   suite "files" {
     cp from=".template/*.toml" to="."
     rm ".template/*.toml"

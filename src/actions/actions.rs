@@ -246,7 +246,7 @@ impl Run {
       .name
       .clone()
       .or_else(|| {
-        let lines = command.trim().lines().count();
+        let lines = command.lines().count();
 
         if lines > 1 {
           Some(command.trim().lines().next().unwrap().to_string() + "...")

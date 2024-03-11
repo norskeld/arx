@@ -28,6 +28,10 @@ pub enum AppError {
 pub struct Cli {
   #[command(subcommand)]
   pub command: BaseCommand,
+
+  /// Delete arx config after scaffolding.
+  #[arg(global = true, short, long)]
+  delete: Option<bool>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -44,10 +48,6 @@ pub enum BaseCommand {
     /// Scaffold from a specified ref (branch, tag, or commit).
     #[arg(name = "REF", short = 'r', long = "ref")]
     meta: Option<String>,
-
-    /// Delete arx config after scaffolding.
-    #[arg(short, long)]
-    delete: Option<bool>,
   },
   /// Scaffold from a local repository.
   #[command(visible_alias = "l")]
@@ -61,10 +61,6 @@ pub enum BaseCommand {
     /// Scaffold from a specified ref (branch, tag, or commit).
     #[arg(name = "REF", short = 'r', long = "ref")]
     meta: Option<String>,
-
-    /// Delete arx config after scaffolding.
-    #[arg(short, long)]
-    delete: Option<bool>,
   },
 }
 
@@ -90,16 +86,12 @@ impl App {
       )
     }))?;
 
+    let overrides = ConfigOptionsOverrides { delete: self.cli.delete };
+
     // Load the config.
     let config = match self.cli.command {
-      | BaseCommand::Remote { src, path, meta, delete } => {
-        let options = ConfigOptionsOverrides { delete };
-        Self::remote(src, path, meta, options).await?
-      },
-      | BaseCommand::Local { src, path, meta, delete } => {
-        let options = ConfigOptionsOverrides { delete };
-        Self::local(src, path, meta, options).await?
-      },
+      | BaseCommand::Remote { src, path, meta } => Self::remote(src, path, meta, overrides).await?,
+      | BaseCommand::Local { src, path, meta } => Self::local(src, path, meta, overrides).await?,
     };
 
     // Create executor and kick off execution.

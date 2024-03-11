@@ -48,3 +48,13 @@ pub enum Value {
   /// A boolean value.
   Bool(bool),
 }
+
+impl Display for Value {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      | Self::String(string) => write!(f, "{string}"),
+      | Self::Number(number) => write!(f, "{number}"),
+      | Self::Bool(boolean) => write!(f, "{boolean}"),
+    }
+  }
+}

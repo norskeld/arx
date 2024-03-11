@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -286,8 +287,6 @@ impl Replace {
   where
     P: AsRef<Path>,
   {
-    let spinner = Spinner::new();
-
     // If no glob pattern specified, traverse all files.
     let pattern = self.glob.clone().unwrap_or("**/*".to_string());
 
@@ -297,10 +296,13 @@ impl Replace {
       .pattern(&pattern);
 
     if !self.replacements.is_empty() {
-      spinner.set_message("Performing replacements");
+      let mut performed = HashSet::new();
+
+      println!("⋅ Applying replacements:");
 
       for matched in traverser.iter().flatten() {
         let mut buffer = String::new();
+        let mut should_write = false;
 
         let mut file = File::open(&matched.path).await.map_err(|source| {
           ActionError::Io {
@@ -317,38 +319,52 @@ impl Replace {
         })?;
 
         for replacement in &self.replacements {
-          if let Some(Value::String(value)) = state.get(replacement) {
-            buffer = buffer.replace(&format!("{{{replacement}}}"), value);
+          if let Some(value) = state.get(replacement) {
+            buffer = buffer.replace(&format!("{{{replacement}}}"), value.to_string().as_str());
+            should_write = true;
+
+            performed.insert(replacement.to_string());
           }
         }
 
-        let mut result = OpenOptions::new()
-          .write(true)
-          .truncate(true)
-          .open(&matched.path)
-          .await
-          .map_err(|source| {
-            ActionError::Io {
-              message: format!(
-                "Failed to open file '{}' for writing.",
-                &matched.path.display()
-              ),
-              source,
-            }
-          })?;
+        if should_write {
+          let mut result = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&matched.path)
+            .await
+            .map_err(|source| {
+              ActionError::Io {
+                message: format!(
+                  "Failed to open file '{}' for writing.",
+                  &matched.path.display()
+                ),
+                source,
+              }
+            })?;
 
-        result
-          .write_all(buffer.as_bytes())
-          .await
-          .map_err(|source| {
-            ActionError::Io {
-              message: format!("Failed to write to the file '{}'.", &matched.path.display()),
-              source,
-            }
-          })?;
+          result
+            .write_all(buffer.as_bytes())
+            .await
+            .map_err(|source| {
+              ActionError::Io {
+                message: format!("Failed to write to the file '{}'.", &matched.path.display()),
+                source,
+              }
+            })?;
+        }
       }
 
-      spinner.stop_with_message("Successfully performed replacements\n");
+      // Report whether replacements were performed or not.
+      for replacement in &self.replacements {
+        let state = if performed.contains(replacement) {
+          "✓".green()
+        } else {
+          "✗".red()
+        };
+
+        println!("└─ {state} ╌ {replacement}");
+      }
     }
 
     Ok(())
@@ -358,7 +374,7 @@ impl Replace {
 impl Unknown {
   pub async fn execute(&self) -> miette::Result<()> {
     let name = self.name.as_str().yellow();
-    let message = format!("! Unknown action: {name}").yellow();
+    let message = format!("? Unknown action: {name}").yellow();
 
     Ok(println!("{message}"))
   }

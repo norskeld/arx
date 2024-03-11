@@ -262,8 +262,11 @@ impl FromStr for RemoteRepository {
   }
 }
 
-/// Represents a local repository. Repositories of this kind don't need to be downloaded, we can
-/// simply clone them locally and switch to desired meta (ref).
+/// Represents a local repository.
+///
+/// Repositories of this kind don't need to be downloaded, we can:
+/// - if a git repository — simply clone it locally and switch to desired meta (ref);
+/// - if a directory — simply copy it as-is.
 #[derive(Debug, PartialEq)]
 pub struct LocalRepository {
   pub source: PathBuf,

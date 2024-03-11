@@ -177,25 +177,29 @@ impl App {
     // Copy the directory.
     local.copy(&destination)?;
 
-    println!("{}", "~ Cloned repository".dim());
-
-    // Checkout the ref.
-    local.checkout(&destination)?;
-
-    println!("{} {}", "~ Checked out ref:".dim(), local.meta.0.dim());
-
-    // Delete inner .git directory.
+    // .git directory path.
     let inner_git = destination.join(".git");
 
     if let Ok(true) = inner_git.try_exists() {
-      fs::remove_dir_all(inner_git).map_err(|source| {
-        AppError::Io {
-          message: "Failed to remove inner .git directory.".to_string(),
-          source,
-        }
-      })?;
+      println!("{}", "~ Cloned repository".dim());
 
-      println!("{}", "~ Removed inner .git directory\n".dim());
+      // Checkout the ref.
+      local.checkout(&destination)?;
+
+      println!("{} {}", "~ Checked out ref:".dim(), local.meta.0.dim());
+
+      if let Ok(true) = inner_git.try_exists() {
+        fs::remove_dir_all(inner_git).map_err(|source| {
+          AppError::Io {
+            message: "Failed to remove inner .git directory.".to_string(),
+            source,
+          }
+        })?;
+
+        println!("{}", "~ Removed inner .git directory\n".dim());
+      }
+    } else {
+      println!("{}", "~ Copied directory\n".dim());
     }
 
     // Now we need to read the config (if it is present).

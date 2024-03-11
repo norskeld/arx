@@ -12,7 +12,6 @@ use unindent::Unindent;
 
 use crate::actions::State;
 use crate::config::actions::*;
-use crate::config::value::*;
 use crate::path::{PathClean, Traverser};
 use crate::spinner::Spinner;
 
@@ -199,8 +198,8 @@ impl Echo {
 
     if let Some(injects) = &self.injects {
       for inject in injects {
-        if let Some(Value::String(value)) = state.get(inject) {
-          message = message.replace(&format!("{{{inject}}}"), value);
+        if let Some(value) = state.get(inject) {
+          message = message.replace(&format!("{{{inject}}}"), value.to_string().as_str());
         }
       }
     }
@@ -219,8 +218,8 @@ impl Run {
 
     if let Some(injects) = &self.injects {
       for inject in injects {
-        if let Some(Value::String(value)) = state.get(inject) {
-          command = command.replace(&format!("{{{inject}}}"), value);
+        if let Some(value) = state.get(inject) {
+          command = command.replace(&format!("{{{inject}}}"), value.to_string().as_str());
         }
       }
     }

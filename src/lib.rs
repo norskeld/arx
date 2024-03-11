@@ -4,6 +4,7 @@ pub(crate) mod actions;
 pub mod app;
 pub(crate) mod config;
 pub(crate) mod path;
+pub(crate) mod report;
 pub(crate) mod repository;
 pub(crate) mod spinner;
 pub(crate) mod unpacker;

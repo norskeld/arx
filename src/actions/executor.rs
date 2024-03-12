@@ -66,7 +66,7 @@ impl Executor {
     match &self.config.actions {
       | Actions::Suite(suites) => self.suite(suites).await?,
       | Actions::Flat(actions) => self.flat(actions).await?,
-      | Actions::Empty => println!("No actions found."),
+      | Actions::Empty => return Ok(()),
     };
 
     // Delete the config file if needed.

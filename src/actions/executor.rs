@@ -105,6 +105,7 @@ impl Executor {
         if !matches!(
           (action, it.peek()),
           (ActionSingle::Prompt(_), Some(ActionSingle::Prompt(_)))
+            | (ActionSingle::Unknown(_), Some(ActionSingle::Unknown(_)))
         ) {
           println!();
         }

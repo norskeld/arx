@@ -277,10 +277,25 @@ impl Run {
 
     if has_failed {
       if !err.is_empty() {
-        eprintln!("{err}");
+        // Multiline scripts are run using a temporary shell script, so the errror messages
+        // sometimes don't look nice, containing the absolute path to that temporary script, e.g.:
+        //
+        // /var/folders/81/48f1l9956vjfqzmf9yy24g1c0000gn/T/fsio_1iyUIEI1GJ.sh: line 2: <error>
+        //
+        // So here I'm doing dirty string manipulation to clean up the message a bit.
+        let message = if let Some((_, trailing)) = err.split_once(".sh:") {
+          trailing.trim().to_string()
+        }
+        // TODO: Check error messages on windows (e.g. when trying to run a non-existing command),
+        // and clean up the message if necessary as well.
+        else {
+          err
+        };
+
+        eprintln!("{message}");
       }
 
-      process::exit(1);
+      process::exit(code);
     }
 
     Ok(println!("{}", output.trim()))

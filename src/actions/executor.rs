@@ -66,7 +66,7 @@ impl Executor {
     match &self.config.actions {
       | Actions::Suite(suites) => self.suite(suites).await?,
       | Actions::Flat(actions) => self.flat(actions).await?,
-      | Actions::Empty => println!("No actions found."),
+      | Actions::Empty => return Ok(()),
     };
 
     // Delete the config file if needed.
@@ -105,6 +105,7 @@ impl Executor {
         if !matches!(
           (action, it.peek()),
           (ActionSingle::Prompt(_), Some(ActionSingle::Prompt(_)))
+            | (ActionSingle::Unknown(_), Some(ActionSingle::Unknown(_)))
         ) {
           println!();
         }

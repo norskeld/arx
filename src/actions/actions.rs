@@ -395,7 +395,7 @@ impl Replace {
           "✗".red()
         };
 
-        println!("└─ {state} ╌ {replacement}");
+        println!("└─ {state} {replacement}");
       }
     }
 

@@ -202,7 +202,7 @@ impl Cache {
       let item = template
         .items
         .iter()
-        .find(|item| Self::compare_hashes(&hash, &item.hash));
+        .find(|item| Self::compare_hashes(hash, &item.hash));
 
       if let Some(item) = item {
         let tarball = self

@@ -8,6 +8,7 @@ use miette::Diagnostic;
 use thiserror::Error;
 
 use crate::actions::Executor;
+use crate::cache::Cache;
 use crate::config::{Config, ConfigOptionsOverrides};
 use crate::report;
 use crate::repository::{LocalRepository, RemoteRepository};
@@ -39,14 +40,21 @@ pub struct Cli {
   #[command(subcommand)]
   pub command: BaseCommand,
 
-  /// Cleanup on failure, i.e. delete target directory. No-op if failed because target directory
-  /// does not exist.
-  #[arg(global = true, short, long)]
+  /// Cleanup on failure.
+  #[arg(global = true, short = 'C', long)]
   cleanup: bool,
 
   /// Delete arx config after scaffolding is complete.
   #[arg(global = true, short, long)]
   delete: Option<bool>,
+
+  /// Use cached template if available.
+  #[arg(global = true, short = 'c', long, default_value = "true")]
+  cache: bool,
+
+  /// Skip running actions.
+  #[arg(global = true, short, long)]
+  skip: bool,
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -64,6 +72,7 @@ pub enum BaseCommand {
     #[arg(name = "REF", short = 'r', long = "ref")]
     meta: Option<String>,
   },
+
   /// Scaffold from a local repository.
   #[command(visible_alias = "l")]
   Local {
@@ -122,11 +131,16 @@ impl App {
     // Cleanup on failure.
     self.state.cleanup = self.cli.cleanup;
 
-    // Load the config.
+    // Retrieve the template.
     let destination = match self.cli.command.clone() {
-      // Preparation flow for remote repositories.
       | BaseCommand::Remote { src, path, meta } => {
-        let remote = RemoteRepository::new(src, meta)?;
+        let mut remote = RemoteRepository::new(src, meta)?;
+
+        // Try to fetch refs early. If we can't get them, there's no point in continuing.
+        remote.fetch_refs()?;
+
+        // Try to select a ref.
+        let hash = remote.resolve_hash()?;
 
         let name = path.as_ref().unwrap_or(&remote.repo);
         let destination = PathBuf::from(name);
@@ -145,16 +159,42 @@ impl App {
           );
         }
 
-        // Fetch the tarball as bytes (compressed).
-        let tarball = remote.fetch().await?;
+        let mut cache = Cache::init()?;
+        let mut bytes = None;
 
-        // Decompress and unpack the tarball.
-        let unpacker = Unpacker::new(tarball);
-        unpacker.unpack_to(&destination)?;
+        let source = remote.get_source();
+        let mut should_fetch = !self.cli.cache;
+
+        if self.cli.cache {
+          println!("{}", "~ Attempting to read from cache".dim());
+
+          if let Some(cached) = cache.read(&source, &hash)? {
+            println!("{}", "~ Found in cache, reading".dim());
+            bytes = Some(cached);
+          } else {
+            println!("{}", "~ Nothing found in cache, fetching".dim());
+            should_fetch = true;
+          }
+        }
+
+        if should_fetch {
+          bytes = Some(remote.fetch().await?);
+        }
+
+        // Decompress and unpack the tarball. If somehow the tarball is empty, bail.
+        if let Some(bytes) = bytes {
+          if should_fetch {
+            cache.write(&source, &hash, &bytes)?;
+          }
+
+          let unpacker = Unpacker::new(bytes);
+          unpacker.unpack_to(&destination)?;
+        } else {
+          miette::bail!("Failed to scaffold: zero bytes.");
+        }
 
         destination
       },
-      // Preparation flow for local repositories.
       | BaseCommand::Local { src, path, meta } => {
         let local = LocalRepository::new(src, meta);
 
@@ -205,25 +245,35 @@ impl App {
             }
           })?;
 
-          println!("{}", "~ Removed inner .git directory\n".dim());
+          println!("{}", "~ Removed inner .git directory".dim());
         } else {
-          println!("{}", "~ Copied directory\n".dim());
+          println!("{}", "~ Copied directory".dim());
         }
 
         destination
       },
     };
 
+    if self.cli.skip {
+      println!("{}", "~ Skipping running actions".dim());
+      return Ok(());
+    }
+
     // Read the config (if it is present).
     let mut config = Config::new(&destination);
 
-    config.load()?;
-    config.override_with(overrides);
+    if config.load()? {
+      println!();
 
-    // Create executor and kick off execution.
-    let executor = Executor::new(config);
+      config.override_with(overrides);
 
-    executor.execute().await
+      // Create executor and kick off execution.
+      let executor = Executor::new(config);
+
+      executor.execute().await
+    } else {
+      Ok(())
+    }
   }
 
   /// Cleanup on failure.

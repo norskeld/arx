@@ -170,14 +170,16 @@ impl Config {
   }
 
   /// Tries to load and parse the config.
-  pub fn load(&mut self) -> Result<(), ConfigError> {
+  pub fn load(&mut self) -> Result<bool, ConfigError> {
     if self.exists() {
       let doc = self.parse()?;
       self.options = self.get_config_options(&doc)?;
       self.actions = self.get_config_actions(&doc)?;
-    }
 
-    Ok(())
+      Ok(true)
+    } else {
+      Ok(false)
+    }
   }
 
   /// Checks if the config exists under `self.root`.

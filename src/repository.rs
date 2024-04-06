@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::fmt::{self, Display};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -42,10 +44,29 @@ pub struct ParseError(Report);
 pub enum FetchError {
   #[error("Request failed.")]
   RequestFailed,
-  #[error("Repository download failed with code {code}.\n\n{url}")]
-  RequestFailedWithCode { code: u16, url: Report },
+
+  #[error("Repository download failed with code {code}. {report}")]
+  RequestFailedWithCode { code: u16, report: Report },
+
   #[error("Couldn't get the response body as bytes.")]
   RequestBodyFailed,
+}
+
+#[derive(Debug, Diagnostic, Error)]
+#[diagnostic(code(arx::repository::remote))]
+pub enum RemoteError {
+  #[error("Failed to create a detached in-memory remote.\n\n{url}")]
+  CreateDetachedRemoteFailed { url: Report },
+
+  #[error("Failed to connect the given remote.\n\n{url}")]
+  ConnectionFailed { url: Report },
+}
+
+#[derive(Debug, Diagnostic, Error)]
+#[diagnostic(code(arx::repository::reference))]
+pub enum ReferenceError {
+  #[error("Invalid reference: `{0}`.")]
+  InvalidSelector(String),
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -53,14 +74,19 @@ pub enum FetchError {
 pub enum CheckoutError {
   #[error("Failed to open the git repository.")]
   OpenFailed(git2::Error),
+
   #[error("Failed to parse revision string `{0}`.")]
   RevparseFailed(String),
+
   #[error("Failed to checkout revision (tree).")]
   TreeCheckoutFailed,
+
   #[error("Reference name is not a valid UTF-8 string.")]
   InvalidRefName,
+
   #[error("Failed to set HEAD to `{0}`.")]
   SetHeadFailed(String),
+
   #[error("Failed to detach HEAD to `{0}`.")]
   DetachHeadFailed(String),
 }
@@ -74,7 +100,7 @@ pub enum RepositoryHost {
   BitBucket,
 }
 
-/// Repository meta or *ref*, i.e. branch, tag or commit.
+/// Repository meta or *ref*, i.e. branch, tag or commit hash.
 ///
 /// This newtype exists solely for providing the default value.
 #[derive(Clone, Debug, PartialEq)]
@@ -84,7 +110,13 @@ impl Default for RepositoryMeta {
   fn default() -> Self {
     // Using "HEAD" instead of hardcoding the default branch name like "master" or "main".
     // Suprisingly, works just fine.
-    RepositoryMeta("HEAD".to_string())
+    Self("HEAD".to_string())
+  }
+}
+
+impl Display for RepositoryMeta {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", self.0)
   }
 }
 
@@ -95,6 +127,7 @@ pub struct RemoteRepository {
   pub user: String,
   pub repo: String,
   pub meta: RepositoryMeta,
+  pub refs: HashMap<String, String>,
 }
 
 impl RemoteRepository {
@@ -108,9 +141,7 @@ impl RemoteRepository {
 
   /// Resolves a URL depending on the host and other repository fields.
   pub fn get_tar_url(&self) -> String {
-    let RemoteRepository { host, user, repo, meta } = self;
-
-    let RepositoryMeta(meta) = meta;
+    let RemoteRepository { host, user, repo, meta, .. } = self;
 
     match host {
       | RepositoryHost::GitHub => {
@@ -125,7 +156,92 @@ impl RemoteRepository {
     }
   }
 
-  /// Fetches the tarball using the resolved URL, and reads it into bytes (`Vec<u8>`).
+  /// Resolves a git repository URL depending on the host and other repository fields.
+  pub fn get_git_url(&self) -> String {
+    let RemoteRepository { host, user, repo, .. } = self;
+
+    match host {
+      | RepositoryHost::GitHub => format!("https://github.com/{user}/{repo}.git"),
+      | RepositoryHost::GitLab => format!("https://gitlab.com/{user}/{repo}.git"),
+      | RepositoryHost::BitBucket => format!("https://bitbucket.org/{user}/{repo}.git"),
+    }
+  }
+
+  /// Returns the source string of the repository.
+  pub fn get_source(&self) -> String {
+    let host = match self.host {
+      | RepositoryHost::GitHub => "github",
+      | RepositoryHost::GitLab => "gitlab",
+      | RepositoryHost::BitBucket => "bitbucket",
+    };
+
+    let user = &self.user;
+    let repo = &self.repo;
+
+    format!("{host}:{user}/{repo}")
+  }
+
+  /// Fetches the refs of the remote repository.
+  pub fn fetch_refs(&mut self) -> Result<(), RemoteError> {
+    let git_url = self.get_git_url();
+
+    let mut remote = git2::Remote::create_detached(git_url.as_bytes()).map_err(|_| {
+      RemoteError::CreateDetachedRemoteFailed { url: miette::miette!("URL: {git_url}") }
+    })?;
+
+    let connection = remote
+      .connect_auth(git2::Direction::Fetch, None, None)
+      .map_err(|_| RemoteError::ConnectionFailed { url: miette::miette!("URL: {git_url}") })?;
+
+    for head in connection.list().unwrap() {
+      let original = head.name();
+
+      let name = (original == "HEAD")
+        .then_some("HEAD")
+        .or_else(|| original.strip_prefix("refs/heads/"))
+        .or_else(|| original.strip_prefix("refs/tags/"))
+        .map(str::to_string);
+
+      if let Some(name) = name {
+        self.refs.insert(name, head.oid().to_string());
+      }
+    }
+
+    Ok(())
+  }
+
+  /// Resolves a given reference to a commit hash.
+  pub fn resolve_hash(&self) -> Result<String, ReferenceError> {
+    let selector = self.meta.to_string();
+
+    // If selector is a branch or tag.
+    if let Some(hash) = self.refs.get(&selector) {
+      Ok(hash.to_owned())
+    }
+    // Or it might be a (short) commit hash.
+    else if selector.len() >= 7 {
+      git2::Oid::from_str(&selector)
+        .map(|oid| {
+          let oid = oid.to_string();
+
+          // Try to find a full commit hash.
+          if let Some(full_hash) = self.refs.values().find(|hash| hash.starts_with(&oid)) {
+            full_hash.to_owned()
+          }
+          // At this point this is most likely a commit that's not a tip of any branch.
+          else {
+            selector.clone()
+          }
+        })
+        .map_err(|_| ReferenceError::InvalidSelector(selector))
+    }
+    // Otherwise this is not a valid ref.
+    else {
+      Err(ReferenceError::InvalidSelector(selector))
+    }
+  }
+
+  /// Fetches the tarball using the resolved URL, and reads it into a vector of bytes.
   pub async fn fetch(&self) -> Result<Vec<u8>, FetchError> {
     let url = self.get_tar_url();
 
@@ -133,7 +249,7 @@ impl RemoteRepository {
       err.status().map_or(FetchError::RequestFailed, |status| {
         FetchError::RequestFailedWithCode {
           code: status.as_u16(),
-          url: miette::miette!("URL: {}", url.clone()),
+          report: miette::miette!("\n\nURL: {}", url.clone()),
         }
       })
     })?;
@@ -141,10 +257,15 @@ impl RemoteRepository {
     let status = response.status();
 
     if !status.is_success() {
-      return Err(FetchError::RequestFailedWithCode {
-        code: status.as_u16(),
-        url: miette::miette!("URL: {}", url),
-      });
+      let code = status.as_u16();
+
+      let report = if code == 404 {
+        miette::miette!("The requested branch, tag or commit was not found.\n\nURL: {url}")
+      } else {
+        miette::miette!("\n\nURL: {url}")
+      };
+
+      return Err(FetchError::RequestFailedWithCode { code, report });
     }
 
     response
@@ -258,7 +379,9 @@ impl FromStr for RemoteRepository {
         RepositoryMeta(input.to_string())
       });
 
-    Ok(RemoteRepository { host, user, repo, meta })
+    let refs = HashMap::default();
+
+    Ok(RemoteRepository { host, user, repo, meta, refs })
   }
 }
 
@@ -321,7 +444,8 @@ impl LocalRepository {
 
   /// Checks out the repository located at the `destination`.
   pub fn checkout(&self, destination: &Path) -> Result<(), CheckoutError> {
-    let RepositoryMeta(meta) = &self.meta;
+    let meta = self.meta.to_string();
+    let head = "HEAD".to_string();
 
     // First, try to create Repository.
     let repository = GitRepository::open(destination).map_err(CheckoutError::OpenFailed)?;
@@ -336,9 +460,9 @@ impl LocalRepository {
         .ok()
         .and_then(|(_, reference)| reference)
         .and_then(|reference| reference.name().map(str::to_string))
-        .unwrap_or("HEAD".to_string())
+        .unwrap_or(head)
     } else {
-      "HEAD".to_string()
+      head
     };
 
     // Try to find (parse revision) the desired reference: branch, tag or commit. They are encoded
@@ -365,7 +489,7 @@ impl LocalRepository {
       .map_err(|_| CheckoutError::TreeCheckoutFailed)?;
 
     match reference {
-      // Here `gref`` is an actual reference like branch or tag.
+      // Here `gref` is an actual reference like branch or tag.
       | Some(gref) => {
         let ref_name = gref.name().ok_or(CheckoutError::InvalidRefName)?;
 
@@ -399,7 +523,8 @@ mod tests {
         host: RepositoryHost::GitHub,
         user: "foo".to_string(),
         repo: "bar".to_string(),
-        meta: RepositoryMeta::default()
+        meta: RepositoryMeta::default(),
+        refs: HashMap::default()
       })
     );
   }
@@ -466,7 +591,8 @@ mod tests {
           host: RepositoryHost::GitHub,
           user: "foo".to_string(),
           repo: "bar".to_string(),
-          meta
+          refs: HashMap::default(),
+          meta,
         })
       );
     }
@@ -490,7 +616,8 @@ mod tests {
           host,
           user: "foo".to_string(),
           repo: "bar".to_string(),
-          meta: RepositoryMeta::default()
+          meta: RepositoryMeta::default(),
+          refs: HashMap::default()
         })
       );
     }
@@ -504,7 +631,8 @@ mod tests {
         host: RepositoryHost::GitHub,
         user: "foo".to_string(),
         repo: "bar".to_string(),
-        meta: RepositoryMeta::default()
+        meta: RepositoryMeta::default(),
+        refs: HashMap::default()
       })
     );
   }
@@ -527,7 +655,8 @@ mod tests {
           host: RepositoryHost::default(),
           user: user.to_string(),
           repo: repo.to_string(),
-          meta: RepositoryMeta::default()
+          meta: RepositoryMeta::default(),
+          refs: HashMap::default()
         })
       );
     }

@@ -104,6 +104,17 @@ impl App {
 
   /// Runs the app and prints any errors.
   pub async fn run(&mut self) {
+    miette::set_hook(Box::new(|_| {
+      Box::new(
+        miette::MietteHandlerOpts::new()
+          .terminal_links(false)
+          .context_lines(3)
+          .tab_width(4)
+          .build(),
+      )
+    }))
+    .expect("Failed to set up the miette hook");
+
     let scaffold_res = self.scaffold().await;
 
     if scaffold_res.is_err() {
@@ -114,17 +125,6 @@ impl App {
 
   /// Kicks of the scaffolding process.
   pub async fn scaffold(&mut self) -> miette::Result<()> {
-    // Slightly tweak miette.
-    miette::set_hook(Box::new(|_| {
-      Box::new(
-        miette::MietteHandlerOpts::new()
-          .terminal_links(false)
-          .context_lines(3)
-          .tab_width(4)
-          .build(),
-      )
-    }))?;
-
     // Build override options.
     let overrides = ConfigOptionsOverrides { delete: self.cli.delete };
 

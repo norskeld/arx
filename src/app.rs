@@ -40,7 +40,7 @@ pub struct Cli {
   #[command(subcommand)]
   pub command: BaseCommand,
 
-  /// Cleanup on failure.
+  /// Cleanup on failure. No-op if failed because target directory already exists.
   #[arg(global = true, short = 'C', long)]
   cleanup: bool,
 
@@ -139,7 +139,7 @@ impl App {
         // Try to fetch refs early. If we can't get them, there's no point in continuing.
         remote.fetch_refs()?;
 
-        // Try to select a ref.
+        // Try to resolve a ref to specific hash.
         let hash = remote.resolve_hash()?;
 
         let name = path.as_ref().unwrap_or(&remote.repo);

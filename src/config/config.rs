@@ -35,11 +35,9 @@ pub enum ConfigError {
     #[source]
     source: io::Error,
   },
-
   #[error(transparent)]
   #[diagnostic(transparent)]
   Kdl(kdl::KdlError),
-
   #[error("{0}")]
   #[diagnostic(transparent)]
   Diagnostic(Report),
@@ -88,8 +86,11 @@ pub struct ConfigOptionsOverrides {
 /// ```
 #[derive(Debug)]
 pub enum Actions {
+  /// Suites of actions to run.
   Suite(Vec<ActionSuite>),
+  /// Flat list of actions to run.
   Flat(Vec<ActionSingle>),
+  /// No actions to run.
   Empty,
 }
 

@@ -27,9 +27,9 @@ pub enum AppError {
 
 #[derive(Debug, Default)]
 pub struct AppState {
-  /// Whether to cleanup on failure or not.
+  /// Whether to clean up on failure or not.
   pub cleanup: bool,
-  /// Cleanup path, will be set to the destination acquired after creating [RemoteRepository] or
+  /// Clean up path, will be set to the destination acquired after creating [RemoteRepository] or
   /// [LocalRepository].
   pub cleanup_path: Option<PathBuf>,
 }
@@ -39,19 +39,15 @@ pub struct AppState {
 pub struct Cli {
   #[command(subcommand)]
   pub command: BaseCommand,
-
-  /// Cleanup on failure. No-op if failed because target directory already exists.
+  /// Clean up on failure. No-op if failed because target directory already exists.
   #[arg(global = true, short = 'C', long)]
   cleanup: bool,
-
   /// Delete arx config after scaffolding is complete.
   #[arg(global = true, short, long)]
   delete: Option<bool>,
-
   /// Use cached template if available.
   #[arg(global = true, short = 'c', long, default_value = "true")]
   cache: bool,
-
   /// Skip running actions.
   #[arg(global = true, short, long)]
   skip: bool,
@@ -64,24 +60,19 @@ pub enum BaseCommand {
   Remote {
     /// Repository to use for scaffolding.
     src: String,
-
     /// Directory to scaffold to.
     path: Option<String>,
-
     /// Scaffold from a specified ref (branch, tag, or commit).
     #[arg(name = "REF", short = 'r', long = "ref")]
     meta: Option<String>,
   },
-
   /// Scaffold from a local repository.
   #[command(visible_alias = "l")]
   Local {
     /// Repository to use for scaffolding.
     src: String,
-
     /// Directory to scaffold to.
     path: Option<String>,
-
     /// Scaffold from a specified ref (branch, tag, or commit).
     #[arg(name = "REF", short = 'r', long = "ref")]
     meta: Option<String>,
@@ -90,7 +81,9 @@ pub enum BaseCommand {
 
 #[derive(Debug)]
 pub struct App {
+  /// Parsed CLI options and commands.
   cli: Cli,
+  /// Current state of the application.
   state: AppState,
 }
 
@@ -276,7 +269,7 @@ impl App {
     }
   }
 
-  /// Cleanup on failure.
+  /// Clean up on failure.
   pub fn cleanup(&self) -> miette::Result<()> {
     if self.state.cleanup {
       if let Some(destination) = &self.state.cleanup_path {

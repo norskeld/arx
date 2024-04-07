@@ -22,7 +22,7 @@ const CACHE_ROOT: &str = "AppData/Local/arx/.cache";
 #[cfg(not(target_os = "windows"))]
 const CACHE_ROOT: &str = ".cache/arx";
 
-/// `<CACHE_ROOT>/cached/<hash>.tar.gz`
+/// `<CACHE_ROOT>/tarballs/<hash>.tar.gz`
 const CACHE_TARBALLS_DIR: &str = "tarballs";
 
 /// `<CACHE_ROOT>/manifest.toml`
@@ -82,7 +82,7 @@ pub struct Template {
 pub struct Item {
   /// Unix timestamp in milliseconds.
   timestamp: i64,
-  /// BLAKE3 hash of the tarball contents.
+  /// Ref/commit hash, either short of full
   hash: String,
 }
 

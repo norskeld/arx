@@ -2,8 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use base32::Alphabet;
 use chrono::Utc;
@@ -37,11 +36,9 @@ pub enum CacheError {
     #[source]
     source: io::Error,
   },
-
   #[error(transparent)]
   #[diagnostic(code(arx::cache::manifest::serialize))]
   TomlSerialize(toml::ser::Error),
-
   #[error(transparent)]
   #[diagnostic(code(arx::cache::manifest::deserialize))]
   TomlDeserialize(toml::de::Error),

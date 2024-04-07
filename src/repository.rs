@@ -44,10 +44,8 @@ pub struct ParseError(Report);
 pub enum FetchError {
   #[error("Request failed.")]
   RequestFailed,
-
   #[error("Repository download failed with code {code}. {report}")]
   RequestFailedWithCode { code: u16, report: Report },
-
   #[error("Couldn't get the response body as bytes.")]
   RequestBodyFailed,
 }
@@ -57,7 +55,6 @@ pub enum FetchError {
 pub enum RemoteError {
   #[error("Failed to create a detached in-memory remote.\n\n{url}")]
   CreateDetachedRemoteFailed { url: Report },
-
   #[error("Failed to connect the given remote.\n\n{url}")]
   ConnectionFailed { url: Report },
 }
@@ -74,19 +71,14 @@ pub enum ReferenceError {
 pub enum CheckoutError {
   #[error("Failed to open the git repository.")]
   OpenFailed(git2::Error),
-
   #[error("Failed to parse revision string `{0}`.")]
   RevparseFailed(String),
-
   #[error("Failed to checkout revision (tree).")]
   TreeCheckoutFailed,
-
   #[error("Reference name is not a valid UTF-8 string.")]
   InvalidRefName,
-
   #[error("Failed to set HEAD to `{0}`.")]
   SetHeadFailed(String),
-
   #[error("Failed to detach HEAD to `{0}`.")]
   DetachHeadFailed(String),
 }

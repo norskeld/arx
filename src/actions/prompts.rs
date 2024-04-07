@@ -4,8 +4,7 @@ use std::process;
 use crossterm::style::Stylize;
 use inquire::formatter::StringFormatter;
 use inquire::ui::{Color, RenderConfig, StyleSheet, Styled};
-use inquire::{required, CustomType};
-use inquire::{Confirm, Editor, InquireError, Select, Text};
+use inquire::{Confirm, CustomType, Editor, InquireError, Select, Text};
 
 use crate::actions::State;
 use crate::config::prompts::*;
@@ -102,7 +101,7 @@ impl InputPrompt {
     if let Some(default) = &self.default {
       prompt = prompt.with_default(default);
     } else {
-      prompt = prompt.with_validator(required!("This field is required."));
+      prompt = prompt.with_validator(inquire::required!("This field is required."));
     }
 
     match prompt.prompt() {

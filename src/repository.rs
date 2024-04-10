@@ -92,6 +92,18 @@ pub enum RepositoryHost {
   BitBucket,
 }
 
+impl Display for RepositoryHost {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let host = match self {
+      | RepositoryHost::GitHub => "github",
+      | RepositoryHost::GitLab => "gitlab",
+      | RepositoryHost::BitBucket => "bitbucket",
+    };
+
+    write!(f, "{host}")
+  }
+}
+
 /// Repository meta or *ref*, i.e. branch, tag or commit hash.
 ///
 /// This newtype exists solely for providing the default value.

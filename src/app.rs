@@ -78,8 +78,17 @@ pub struct RepositoryArgs {
 pub enum CacheCommand {
   /// List cache entries.
   List,
-  /// Remove all cache entries.
-  Clear,
+  /// Remove cache entries.
+  Remove {
+    /// List of cache entries to remove.
+    entries: Vec<String>,
+    /// Interactive mode.
+    #[arg(short, long)]
+    interactive: bool,
+    /// Remove all cache entries.
+    #[arg(short, long, conflicts_with_all = ["entries", "interactive"])]
+    all: bool,
+  },
 }
 
 #[derive(Debug)]
@@ -91,6 +100,7 @@ pub struct App {
 }
 
 impl App {
+  #[allow(clippy::new_without_default)]
   pub fn new() -> Self {
     Self {
       cli: Cli::parse(),
@@ -296,7 +306,15 @@ impl App {
 
     match command {
       | CacheCommand::List => Ok(cache.list()?),
-      | CacheCommand::Clear => Ok(cache.clear()?),
+      | CacheCommand::Remove { entries, interactive, all } => {
+        if all {
+          cache.remove_all()
+        } else if interactive {
+          cache.remove_interactive()
+        } else {
+          cache.remove(entries)
+        }
+      },
     }
   }
 
@@ -314,11 +332,5 @@ impl App {
     }
 
     Ok(())
-  }
-}
-
-impl Default for App {
-  fn default() -> Self {
-    Self::new()
   }
 }

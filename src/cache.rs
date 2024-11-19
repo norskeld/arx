@@ -8,6 +8,7 @@ use std::str::FromStr;
 use base32::Alphabet;
 use chrono::{DateTime, Utc};
 use crossterm::style::Stylize;
+use itertools::Itertools;
 use miette::{Diagnostic, Report};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -59,7 +60,7 @@ type Entry = String;
 /// # Structure
 ///
 /// ```toml
-/// [[templates.<entry>.items]]
+/// [templates.<entry>]
 /// name = "<name>"
 /// hash = "<hash>"
 /// timestamp = <timestamp>
@@ -69,22 +70,23 @@ type Entry = String;
 ///
 /// - `<entry>` - Base 32 encoded source string in the form of: `<host>:<user>/<repo>`.
 /// - `<name>` - Ref name or commit hash.
-/// - `<hash>` - Ref/commit hash, either short of full. Used in filenames.
+/// - `<hash>` - Ref/commit hash, either short or full. Used in filenames.
 /// - `<timestamp>` - Unix timestamp in milliseconds.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Manifest {
-  templates: HashMap<Entry, Template>,
+  templates: HashMap<Entry, Vec<Item>>,
 }
 
-/// Represents a template table.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Template {
-  /// List of linked items in the template table.
-  items: Vec<Item>,
+impl Manifest {
+  /// Normalizes manifest be performing some cleanups.
+  pub fn normalize(&mut self) {
+    // Remove templates that are empty.
+    self.templates.retain(|_, items| !items.is_empty());
+  }
 }
 
 /// Represents a linked item in the template table.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Item {
   /// Ref name or commit hash.
   name: String,
@@ -118,7 +120,18 @@ impl Cache {
       .ok_or(miette::miette!("Failed to resolve home directory."))
   }
 
-  /// Checks if two hashes match.
+  /// Parses a string into a [RemoteRepository].
+  fn parse_repository(input: &str) -> Result<RemoteRepository, CacheError> {
+    RemoteRepository::from_str(input).map_err(|_| {
+      CacheError::Diagnostic(miette::miette!(
+        code = "arx::cache::malformed_entry",
+        help = "Manifest may be malformed, clear the cache and try again.",
+        "Couldn't parse entry: `{input}`."
+      ))
+    })
+  }
+
+  /// Checks if two hashes match. Custom check needed because hashes may differ in length.
   fn compare_hashes(left: &str, right: &str) -> bool {
     match left.len().cmp(&right.len()) {
       | Ordering::Less => right.starts_with(left),
@@ -150,6 +163,15 @@ impl Cache {
 
   /// Writes manifest to disk.
   fn write_manifest(&mut self) -> miette::Result<()> {
+    // Create cache directory if it doesn't exist.
+    fs::create_dir_all(&self.root).map_err(|source| {
+      CacheError::Io {
+        message: "Failed to create the cache directory.".to_string(),
+        source,
+      }
+    })?;
+
+    // Serialize and write manifest.
     let manifest = toml::to_string(&self.manifest).map_err(CacheError::TomlSerialize)?;
 
     fs::write(self.root.join(CACHE_MANIFEST), manifest).map_err(|source| {
@@ -177,26 +199,23 @@ impl Cache {
       .manifest
       .templates
       .entry(entry)
-      .and_modify(|template| {
+      .and_modify(|items| {
         let hash = hash.to_string();
         let name = name.to_string();
 
-        if !template
-          .items
+        if !items
           .iter()
           .any(|item| Self::compare_hashes(&hash, &item.hash))
         {
-          template.items.push(Item { name, hash, timestamp });
+          items.push(Item { name, hash, timestamp });
         }
       })
       .or_insert_with(|| {
-        Template {
-          items: vec![Item {
-            name: name.to_string(),
-            hash: hash.to_string(),
-            timestamp,
-          }],
-        }
+        vec![Item {
+          name: name.to_string(),
+          hash: hash.to_string(),
+          timestamp,
+        }]
       });
 
     self.write_manifest()?;
@@ -221,13 +240,12 @@ impl Cache {
     Ok(())
   }
 
-  /// Reads from cache.
+  /// Reads from cache and returns the cached tarball bytes if any.
   pub fn read(&self, source: &str, hash: &str) -> miette::Result<Option<Vec<u8>>> {
     let entry = base32::encode(BASE32_ALPHABET, source.as_bytes());
 
-    if let Some(template) = self.manifest.templates.get(&entry) {
-      let item = template
-        .items
+    if let Some(items) = self.manifest.templates.get(&entry) {
+      let item = items
         .iter()
         .find(|item| Self::compare_hashes(hash, &item.hash));
 
@@ -253,7 +271,7 @@ impl Cache {
 
   /// Lists cache entries.
   pub fn list(&self) -> Result<(), CacheError> {
-    for (key, template) in &self.manifest.templates {
+    for (key, items) in &self.manifest.templates {
       if let Some(bytes) = base32::decode(BASE32_ALPHABET, key) {
         let entry = String::from_utf8(bytes).map_err(|_| {
           CacheError::Diagnostic(miette::miette!(
@@ -263,20 +281,16 @@ impl Cache {
           ))
         })?;
 
-        let repo = RemoteRepository::from_str(&entry).map_err(|_| {
-          CacheError::Diagnostic(miette::miette!(
-            code = "arx::cache::malformed_entry",
-            help = "Manifest may be malformed, clear the cache and try again.",
-            "Couldn't parse entry: `{key}`."
-          ))
-        })?;
-
+        let repo = Self::parse_repository(&entry)?;
         let host = repo.host.to_string().cyan();
         let name = format!("{}/{}", repo.user, repo.repo).green();
 
         println!("⋅ {host}:{name}");
 
-        for item in &template.items {
+        for item in items
+          .into_iter()
+          .sorted_by(|a, b| b.timestamp.cmp(&a.timestamp))
+        {
           if let Some(date) = DateTime::from_timestamp_millis(item.timestamp) {
             let date = date.format("%d/%m/%Y %H:%M").to_string().dim();
             let name = item.name.clone().cyan();
@@ -297,9 +311,98 @@ impl Cache {
     Ok(())
   }
 
-  /// Clears cache.
-  pub fn clear(&mut self) -> miette::Result<()> {
+  /// Selects cache entries to remove based on the given search terms.
+  fn select_entries(&self, search: Vec<String>) -> HashMap<Entry, Vec<Item>> {
+    let mut selection = HashMap::new();
+
+    for term in search {
+      let entry = base32::encode(BASE32_ALPHABET, term.as_bytes());
+
+      if let Some(items) = self.manifest.templates.get(&entry) {
+        selection.insert(entry, items.to_vec());
+      } else {
+        for (entry, items) in &self.manifest.templates {
+          let droppable: Vec<_> = items
+            .into_iter()
+            .filter(|item| item.name == term || Self::compare_hashes(&item.hash, &term))
+            .cloned()
+            .collect();
+
+          if !droppable.is_empty() {
+            selection.insert(entry.to_owned(), droppable);
+          }
+        }
+      }
+    }
+
+    selection
+  }
+
+  /// Removes cache entries _from the manifest only_ based on the given selections.
+  fn remove_entries(&mut self, selection: &HashMap<Entry, Vec<Item>>) -> miette::Result<()> {
+    for (entry, items) in selection {
+      self.manifest.templates.get_mut(entry).map(|source| {
+        source.retain(|item| !items.contains(item));
+      });
+    }
+
+    Ok(())
+  }
+
+  /// Removes specified cache entries. We allow to remove by specifying:
+  ///
+  /// - entry name, e.g. github:foo/bar -- this will delete all cached entries under that name;
+  /// - entry hash, e.g. 4a5a56fd -- this will delete specific cached entry;
+  /// - ref name, e.g. feat/some-feature-name -- same as entry hash.
+  pub fn remove(&mut self, needles: Vec<String>) -> miette::Result<()> {
+    let selection = self.select_entries(needles);
+
+    // Actually remove the files and print their names (<hash>.tar.gz).
+    for (entry, items) in &selection {
+      let entry = base32::decode(BASE32_ALPHABET, entry.as_str())
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .unwrap();
+
+      let repo = Self::parse_repository(&entry)?;
+      let host = repo.host.to_string().cyan();
+      let name = format!("{}/{}", repo.user, repo.repo).green();
+
+      println!("⋅ {host}:{name}");
+
+      for item in items
+        .into_iter()
+        .sorted_by(|a, b| b.timestamp.cmp(&a.timestamp))
+      {
+        let tarball = self
+          .root
+          .join(CACHE_TARBALLS_DIR)
+          .join(format!("{}.tar.gz", &item.hash));
+
+        let name = item.name.clone().cyan();
+        let hash = item.hash.clone().yellow();
+
+        print!("└─ {name} ╌╌ {hash} ");
+
+        match fs::remove_file(&tarball) {
+          | Ok(..) => println!("{}", "✓".green()),
+          | Err(..) => println!("{}", "✗".red()),
+        }
+      }
+    }
+
+    self.remove_entries(&selection)?;
+
+    // Normalize and write manifest.
+    self.manifest.normalize();
+    self.write_manifest()?;
+
+    Ok(())
+  }
+
+  /// Removes all cache entries.
+  pub fn remove_all(&mut self) -> miette::Result<()> {
     self.manifest.templates.clear();
+    self.manifest.normalize();
 
     fs::remove_dir_all(self.root.join(CACHE_TARBALLS_DIR)).map_err(|source| {
       CacheError::Io {
@@ -308,8 +411,11 @@ impl Cache {
       }
     })?;
 
-    self.write_manifest()?;
+    self.write_manifest()
+  }
 
+  /// Removes cache entries interactively.
+  pub fn remove_interactive(&mut self) -> miette::Result<()> {
     Ok(())
   }
 }

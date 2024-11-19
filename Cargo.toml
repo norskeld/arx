@@ -18,6 +18,7 @@ glob-match = { version = "0.2.1" }
 home = "0.5.9"
 indicatif = "0.17.8"
 inquire = { version = "0.7.0", features = ["editor"] }
+itertools = "0.13.0"
 kdl = "=4.6.0"
 miette = { version = "=5.10.0", features = ["fancy"] }
 reqwest = { version = "0.11.22", features = ["json"] }

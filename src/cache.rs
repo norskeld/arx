@@ -287,10 +287,7 @@ impl Cache {
 
         println!("⋅ {host}:{name}");
 
-        for item in items
-          .into_iter()
-          .sorted_by(|a, b| b.timestamp.cmp(&a.timestamp))
-        {
+        for item in items.iter().sorted_by(|a, b| b.timestamp.cmp(&a.timestamp)) {
           if let Some(date) = DateTime::from_timestamp_millis(item.timestamp) {
             let date = date.format("%d/%m/%Y %H:%M").to_string().dim();
             let name = item.name.clone().cyan();
@@ -323,7 +320,7 @@ impl Cache {
       } else {
         for (entry, items) in &self.manifest.templates {
           let droppable: Vec<_> = items
-            .into_iter()
+            .iter()
             .filter(|item| item.name == term || Self::compare_hashes(&item.hash, &term))
             .cloned()
             .collect();
@@ -341,9 +338,9 @@ impl Cache {
   /// Removes cache entries _from the manifest only_ based on the given selections.
   fn remove_entries(&mut self, selection: &HashMap<Entry, Vec<Item>>) -> miette::Result<()> {
     for (entry, items) in selection {
-      self.manifest.templates.get_mut(entry).map(|source| {
+      if let Some(source) = self.manifest.templates.get_mut(entry) {
         source.retain(|item| !items.contains(item));
-      });
+      }
     }
 
     Ok(())
@@ -369,10 +366,7 @@ impl Cache {
 
       println!("⋅ {host}:{name}");
 
-      for item in items
-        .into_iter()
-        .sorted_by(|a, b| b.timestamp.cmp(&a.timestamp))
-      {
+      for item in items.iter().sorted_by(|a, b| b.timestamp.cmp(&a.timestamp)) {
         let tarball = self
           .root
           .join(CACHE_TARBALLS_DIR)

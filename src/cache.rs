@@ -79,9 +79,96 @@ pub struct Manifest {
 
 impl Manifest {
   /// Normalizes manifest be performing some cleanups.
-  pub fn normalize(&mut self) {
+  fn normalize(&mut self) {
     // Remove templates that are empty.
     self.templates.retain(|_, items| !items.is_empty());
+  }
+
+  /// Reads manifest from disk.
+  fn read(root: impl AsRef<Path>) -> miette::Result<Manifest> {
+    let location = root.as_ref().join(CACHE_MANIFEST);
+
+    if !location.is_file() {
+      // If the manifest file does not exist, we do not return an error.
+      return Ok(Manifest::default());
+    }
+
+    let contents = fs::read_to_string(&location).map_err(|source| {
+      CacheError::Io {
+        message: "Failed to read the manifest.".to_string(),
+        source,
+      }
+    })?;
+
+    let manifest = toml::from_str(&contents).map_err(CacheError::TomlDeserialize)?;
+
+    Ok(manifest)
+  }
+
+  /// Writes manifest to disk.
+  fn write(&mut self, root: impl AsRef<Path>) -> miette::Result<()> {
+    self.normalize();
+
+    // Create cache directory if it doesn't exist.
+    fs::create_dir_all(root.as_ref()).map_err(|source| {
+      CacheError::Io {
+        message: "Failed to create the cache directory.".to_string(),
+        source,
+      }
+    })?;
+
+    // Serialize and write manifest.
+    let manifest = toml::to_string(&self).map_err(CacheError::TomlSerialize)?;
+
+    fs::write(root.as_ref().join(CACHE_MANIFEST), manifest).map_err(|source| {
+      CacheError::Io {
+        message: "Failed to write the manifest to disk.".to_string(),
+        source,
+      }
+    })?;
+
+    Ok(())
+  }
+
+  /// Remove all cache entries.
+  fn clear_entries(&mut self) {
+    self.templates.clear();
+  }
+
+  /// Selects cache entries to remove based on the given search terms.
+  fn select_entries(&self, search: Vec<String>) -> HashMap<Entry, Vec<Item>> {
+    let mut selection = HashMap::new();
+
+    for term in search {
+      let entry = base32::encode(BASE32_ALPHABET, term.as_bytes());
+
+      if let Some(items) = self.templates.get(&entry) {
+        selection.insert(entry, items.to_vec());
+      } else {
+        for (entry, items) in &self.templates {
+          let droppable: Vec<_> = items
+            .iter()
+            .filter(|item| item.name == term || Cache::compare_hashes(&item.hash, &term))
+            .cloned()
+            .collect();
+
+          if !droppable.is_empty() {
+            selection.insert(entry.to_owned(), droppable);
+          }
+        }
+      }
+    }
+
+    selection
+  }
+
+  /// Removes cache entries _from the manifest only_ based on the given selections.
+  fn remove_entries(&mut self, selection: &HashMap<Entry, Vec<Item>>) {
+    for (entry, items) in selection {
+      if let Some(source) = self.templates.get_mut(entry) {
+        source.retain(|item| !items.contains(item));
+      }
+    }
   }
 }
 
@@ -108,7 +195,7 @@ impl Cache {
   /// Initializes cache and creates manifest if it doesn't exist.
   pub fn init() -> miette::Result<Self> {
     let root = Self::get_root()?;
-    let manifest = Self::read_manifest(&root)?;
+    let manifest = Manifest::read(&root)?;
 
     Ok(Self { root, manifest })
   }
@@ -138,50 +225,6 @@ impl Cache {
       | Ordering::Greater => left.starts_with(right),
       | Ordering::Equal => left == right,
     }
-  }
-
-  /// Reads manifest from disk.
-  fn read_manifest<P: AsRef<Path>>(root: P) -> miette::Result<Manifest> {
-    let location = root.as_ref().join(CACHE_MANIFEST);
-
-    if !location.is_file() {
-      // If the manifest file does not exist, we do not return an error.
-      return Ok(Manifest::default());
-    }
-
-    let contents = fs::read_to_string(&location).map_err(|source| {
-      CacheError::Io {
-        message: "Failed to read the manifest.".to_string(),
-        source,
-      }
-    })?;
-
-    let manifest = toml::from_str(&contents).map_err(CacheError::TomlDeserialize)?;
-
-    Ok(manifest)
-  }
-
-  /// Writes manifest to disk.
-  fn write_manifest(&mut self) -> miette::Result<()> {
-    // Create cache directory if it doesn't exist.
-    fs::create_dir_all(&self.root).map_err(|source| {
-      CacheError::Io {
-        message: "Failed to create the cache directory.".to_string(),
-        source,
-      }
-    })?;
-
-    // Serialize and write manifest.
-    let manifest = toml::to_string(&self.manifest).map_err(CacheError::TomlSerialize)?;
-
-    fs::write(self.root.join(CACHE_MANIFEST), manifest).map_err(|source| {
-      CacheError::Io {
-        message: "Failed to write the manifest to disk.".to_string(),
-        source,
-      }
-    })?;
-
-    Ok(())
   }
 
   /// Writes contents to cache.
@@ -218,7 +261,7 @@ impl Cache {
         }]
       });
 
-    self.write_manifest()?;
+    self.manifest.write(&self.root)?;
 
     let tarballs_dir = self.root.join(CACHE_TARBALLS_DIR);
     let tarball = tarballs_dir.join(format!("{hash}.tar.gz"));
@@ -308,51 +351,13 @@ impl Cache {
     Ok(())
   }
 
-  /// Selects cache entries to remove based on the given search terms.
-  fn select_entries(&self, search: Vec<String>) -> HashMap<Entry, Vec<Item>> {
-    let mut selection = HashMap::new();
-
-    for term in search {
-      let entry = base32::encode(BASE32_ALPHABET, term.as_bytes());
-
-      if let Some(items) = self.manifest.templates.get(&entry) {
-        selection.insert(entry, items.to_vec());
-      } else {
-        for (entry, items) in &self.manifest.templates {
-          let droppable: Vec<_> = items
-            .iter()
-            .filter(|item| item.name == term || Self::compare_hashes(&item.hash, &term))
-            .cloned()
-            .collect();
-
-          if !droppable.is_empty() {
-            selection.insert(entry.to_owned(), droppable);
-          }
-        }
-      }
-    }
-
-    selection
-  }
-
-  /// Removes cache entries _from the manifest only_ based on the given selections.
-  fn remove_entries(&mut self, selection: &HashMap<Entry, Vec<Item>>) -> miette::Result<()> {
-    for (entry, items) in selection {
-      if let Some(source) = self.manifest.templates.get_mut(entry) {
-        source.retain(|item| !items.contains(item));
-      }
-    }
-
-    Ok(())
-  }
-
   /// Removes specified cache entries. We allow to remove by specifying:
   ///
   /// - entry name, e.g. github:foo/bar -- this will delete all cached entries under that name;
   /// - entry hash, e.g. 4a5a56fd -- this will delete specific cached entry;
   /// - ref name, e.g. feat/some-feature-name -- same as entry hash.
   pub fn remove(&mut self, needles: Vec<String>) -> miette::Result<()> {
-    let selection = self.select_entries(needles);
+    let selection = self.manifest.select_entries(needles);
 
     // Actually remove the files and print their names (<hash>.tar.gz).
     for (entry, items) in &selection {
@@ -384,20 +389,14 @@ impl Cache {
       }
     }
 
-    self.remove_entries(&selection)?;
-
-    // Normalize and write manifest.
-    self.manifest.normalize();
-    self.write_manifest()?;
+    self.manifest.remove_entries(&selection);
+    self.manifest.write(&self.root)?;
 
     Ok(())
   }
 
   /// Removes all cache entries.
   pub fn remove_all(&mut self) -> miette::Result<()> {
-    self.manifest.templates.clear();
-    self.manifest.normalize();
-
     fs::remove_dir_all(self.root.join(CACHE_TARBALLS_DIR)).map_err(|source| {
       CacheError::Io {
         message: format!("Failed to clear the '{CACHE_TARBALLS_DIR}' directory."),
@@ -405,7 +404,10 @@ impl Cache {
       }
     })?;
 
-    self.write_manifest()
+    self.manifest.clear_entries();
+    self.manifest.write(&self.root)?;
+
+    Ok(())
   }
 
   /// Removes cache entries interactively.

@@ -1,10 +1,4 @@
-use std::fmt::Display;
-use std::process;
-
-use crossterm::style::Stylize;
-use inquire::formatter::StringFormatter;
-use inquire::ui::{Color, RenderConfig, StyleSheet, Styled};
-use inquire::{Confirm, CustomType, Editor, InquireError, Select, Text};
+use inquire::{Confirm, CustomType, Editor, Select, Text};
 
 use crate::actions::State;
 use crate::config::prompts::*;
@@ -12,7 +6,13 @@ use crate::config::{Number, Value};
 
 /// Helper module holding useful functions.
 mod helpers {
-  use super::*;
+  use std::fmt::Display;
+  use std::process;
+
+  use crossterm::style::Stylize;
+  use inquire::formatter::StringFormatter;
+  use inquire::ui::{Color, RenderConfig, StyleSheet, Styled};
+  use inquire::InquireError;
 
   /// Returns configured theme.
   pub fn theme<'r>() -> RenderConfig<'r> {

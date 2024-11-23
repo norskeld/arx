@@ -409,9 +409,4 @@ impl Cache {
 
     Ok(())
   }
-
-  /// Removes cache entries interactively.
-  pub fn remove_interactive(&mut self) -> miette::Result<()> {
-    Ok(())
-  }
 }

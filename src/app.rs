@@ -82,9 +82,6 @@ pub enum CacheCommand {
   Remove {
     /// List of cache entries to remove.
     entries: Vec<String>,
-    /// Interactive mode.
-    #[arg(short, long)]
-    interactive: bool,
     /// Remove all cache entries.
     #[arg(short, long, conflicts_with_all = ["entries", "interactive"])]
     all: bool,
@@ -306,11 +303,9 @@ impl App {
 
     match command {
       | CacheCommand::List => Ok(cache.list()?),
-      | CacheCommand::Remove { entries, interactive, all } => {
+      | CacheCommand::Remove { entries, all } => {
         if all {
           cache.remove_all()
-        } else if interactive {
-          cache.remove_interactive()
         } else {
           cache.remove(entries)
         }

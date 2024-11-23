@@ -9,3 +9,4 @@ pub(crate) mod report;
 pub(crate) mod repository;
 pub(crate) mod spinner;
 pub(crate) mod unpacker;
+pub(crate) mod utils;

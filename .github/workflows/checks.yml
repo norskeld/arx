@@ -9,8 +9,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  extract-toolchain:
-    name: extract toolchain
+  toolchain:
+    name: Toolchain
     runs-on: ubuntu-latest
     outputs:
       toolchain: ${{ steps.toolchain.outputs.value }}
@@ -24,11 +24,11 @@ jobs:
       - run: echo "toolchain=${{ steps.toolchain.outputs.value || 'stable' }}" >> $GITHUB_OUTPUT
 
   clippy:
-    name: cargo clippy
+    name: Clippy
     runs-on: ubuntu-latest
-    needs: extract-toolchain
+    needs: toolchain
     env:
-      TOOLCHAIN: ${{ needs.extract-toolchain.outputs.toolchain }}
+      TOOLCHAIN: ${{ needs.toolchain.outputs.toolchain }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -38,22 +38,8 @@ jobs:
       - uses: swatinem/rust-cache@v2
       - run: cargo clippy -- -D warnings
 
-  test:
-    name: cargo test
-    needs: extract-toolchain
-    runs-on: ubuntu-latest
-    env:
-      TOOLCHAIN: ${{ needs.extract-toolchain.outputs.toolchain }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.TOOLCHAIN }}
-      - uses: swatinem/rust-cache@v2
-      - run: cargo test
-
   fmt:
-    name: cargo fmt
+    name: Formatting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,4 +48,18 @@ jobs:
           toolchain: nightly
           components: rustfmt
       - uses: swatinem/rust-cache@v2
-      - run: cargo fmt --all -- --check
+      - run: cargo +nightly fmt --all -- --check
+
+  test:
+    name: Test
+    needs: toolchain
+    runs-on: ubuntu-latest
+    env:
+      TOOLCHAIN: ${{ needs.toolchain.outputs.toolchain }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN }}
+      - uses: swatinem/rust-cache@v2
+      - run: cargo test

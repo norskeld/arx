@@ -18,7 +18,7 @@ use crate::spinner::Spinner;
 #[derive(Debug, Diagnostic, Error)]
 pub enum ActionError {
   #[error("{message}")]
-  #[diagnostic(code(arx::actions::io))]
+  #[diagnostic(code(decaff::actions::io))]
   Io {
     message: String,
     #[source]

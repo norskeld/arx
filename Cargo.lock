@@ -81,34 +81,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arx"
-version = "0.1.0"
-dependencies = [
- "base32",
- "chrono",
- "clap",
- "crossterm 0.27.0",
- "flate2",
- "git2",
- "glob-match",
- "home",
- "indicatif",
- "inquire",
- "itertools",
- "kdl",
- "miette",
- "reqwest",
- "run_script",
- "serde",
- "tar",
- "thiserror",
- "tokio",
- "toml",
- "unindent",
- "walkdir",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -333,6 +305,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acdd7c62a3665c7f6830a51635d9ac9b23ed385797f70a83bb8bafe9c572ab2b"
 dependencies = [
  "winapi",
+]
+
+[[package]]
+name = "decaff"
+version = "0.1.0"
+dependencies = [
+ "base32",
+ "chrono",
+ "clap",
+ "crossterm 0.27.0",
+ "flate2",
+ "git2",
+ "glob-match",
+ "home",
+ "indicatif",
+ "inquire",
+ "itertools",
+ "kdl",
+ "miette",
+ "reqwest",
+ "run_script",
+ "serde",
+ "tar",
+ "thiserror",
+ "tokio",
+ "toml",
+ "unindent",
+ "walkdir",
 ]
 
 [[package]]

@@ -18,13 +18,13 @@ use crate::repository::RemoteRepository;
 /// Unpadded Base 32 alphabet.
 const BASE32_ALPHABET: Alphabet = Alphabet::RFC4648 { padding: false };
 
-/// `%userprofile%/AppData/Local/arx/.cache`
+/// `%userprofile%/AppData/Local/decaff/.cache`
 #[cfg(target_os = "windows")]
-const CACHE_ROOT: &str = "AppData/Local/arx/.cache";
+const CACHE_ROOT: &str = "AppData/Local/decaff/.cache";
 
-/// `$HOME/.cache/arx`
+/// `$HOME/.cache/decaff`
 #[cfg(not(target_os = "windows"))]
-const CACHE_ROOT: &str = ".cache/arx";
+const CACHE_ROOT: &str = ".cache/decaff";
 
 /// `<CACHE_ROOT>/tarballs/<hash>.tar.gz`
 const CACHE_TARBALLS_DIR: &str = "tarballs";
@@ -35,17 +35,17 @@ const CACHE_MANIFEST: &str = "manifest.toml";
 #[derive(Debug, Diagnostic, Error)]
 pub enum CacheError {
   #[error("{message}")]
-  #[diagnostic(code(arx::cache::io))]
+  #[diagnostic(code(decaff::cache::io))]
   Io {
     message: String,
     #[source]
     source: io::Error,
   },
   #[error(transparent)]
-  #[diagnostic(code(arx::cache::manifest::serialize))]
+  #[diagnostic(code(decaff::cache::manifest::serialize))]
   TomlSerialize(toml::ser::Error),
   #[error(transparent)]
-  #[diagnostic(code(arx::cache::manifest::deserialize))]
+  #[diagnostic(code(decaff::cache::manifest::deserialize))]
   TomlDeserialize(toml::de::Error),
   #[error("{0}")]
   #[diagnostic(transparent)]
@@ -211,7 +211,7 @@ impl Cache {
   fn parse_repository(input: &str) -> Result<RemoteRepository, CacheError> {
     RemoteRepository::from_str(input).map_err(|_| {
       CacheError::Diagnostic(miette::miette!(
-        code = "arx::cache::malformed_entry",
+        code = "decaff::cache::malformed_entry",
         help = "Manifest may be malformed, clear the cache and try again.",
         "Couldn't parse entry: `{input}`."
       ))
@@ -318,7 +318,7 @@ impl Cache {
       if let Some(bytes) = base32::decode(BASE32_ALPHABET, key) {
         let entry = String::from_utf8(bytes).map_err(|_| {
           CacheError::Diagnostic(miette::miette!(
-            code = "arx::cache::invalid_utf8",
+            code = "decaff::cache::invalid_utf8",
             help = "Manifest may be malformed, clear the cache and try again.",
             "Couldn't decode entry due to invalid UTF-8 in the string: `{key}`."
           ))
@@ -341,7 +341,7 @@ impl Cache {
         }
       } else {
         return Err(CacheError::Diagnostic(miette::miette!(
-          code = "arx::cache::malformed_entry",
+          code = "decaff::cache::malformed_entry",
           help = "Manifest may be malformed, clear the cache and try again.",
           "Couldn't decode entry: `{key}`."
         )));

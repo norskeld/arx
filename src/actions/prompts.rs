@@ -6,7 +6,6 @@ use crate::config::{Number, Value};
 use crate::utils::prompts as helpers;
 
 impl ConfirmPrompt {
-  /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = helpers::messages(&self.name, &self.hint);
 
@@ -28,7 +27,6 @@ impl ConfirmPrompt {
 }
 
 impl InputPrompt {
-  /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = helpers::messages(&self.name, &self.hint);
 
@@ -53,7 +51,6 @@ impl InputPrompt {
 }
 
 impl NumberPrompt {
-  /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = helpers::messages(&self.name, &self.hint);
 
@@ -80,7 +77,6 @@ impl NumberPrompt {
 }
 
 impl SelectPrompt {
-  /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = helpers::messages(&self.name, &self.hint);
 
@@ -100,7 +96,6 @@ impl SelectPrompt {
 }
 
 impl EditorPrompt {
-  /// Execute the prompt and populate the state.
   pub async fn execute(&self, state: &mut State) -> miette::Result<()> {
     let (name, hint, help) = helpers::messages(&self.name, &self.hint);
 

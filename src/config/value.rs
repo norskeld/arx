@@ -6,7 +6,7 @@ use thiserror::Error;
 
 #[derive(Debug, Diagnostic, Error)]
 #[error("`{0}` is not a valid number.")]
-#[diagnostic(code(arx::config::prompts::parse))]
+#[diagnostic(code(decaff::config::prompts::parse))]
 pub struct NumberParseError(pub String);
 
 /// Value of a number prompt.

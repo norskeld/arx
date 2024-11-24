@@ -26,7 +26,7 @@ macro_rules! parse_error {
 #[derive(Debug, Diagnostic, Error)]
 pub enum RepositoryError {
   #[error("{message}")]
-  #[diagnostic(code(arx::repository::io))]
+  #[diagnostic(code(decaff::repository::io))]
   Io {
     message: String,
     #[source]
@@ -40,7 +40,7 @@ pub enum RepositoryError {
 pub struct ParseError(Report);
 
 #[derive(Debug, Diagnostic, Error)]
-#[diagnostic(code(arx::repository::fetch))]
+#[diagnostic(code(decaff::repository::fetch))]
 pub enum FetchError {
   #[error("Request failed.")]
   RequestFailed,
@@ -51,7 +51,7 @@ pub enum FetchError {
 }
 
 #[derive(Debug, Diagnostic, Error)]
-#[diagnostic(code(arx::repository::remote))]
+#[diagnostic(code(decaff::repository::remote))]
 pub enum RemoteError {
   #[error("Failed to create a detached in-memory remote.\n\n{url}")]
   CreateDetachedRemoteFailed { url: Report },
@@ -60,14 +60,14 @@ pub enum RemoteError {
 }
 
 #[derive(Debug, Diagnostic, Error)]
-#[diagnostic(code(arx::repository::reference))]
+#[diagnostic(code(decaff::repository::reference))]
 pub enum ReferenceError {
   #[error("Invalid reference: `{0}`.")]
   InvalidSelector(String),
 }
 
 #[derive(Debug, Diagnostic, Error)]
-#[diagnostic(code(arx::repository::checkout))]
+#[diagnostic(code(decaff::repository::checkout))]
 pub enum CheckoutError {
   #[error("Failed to open the git repository.")]
   OpenFailed(git2::Error),
@@ -309,7 +309,7 @@ impl FromStr for RemoteRepository {
         | _ => {
           return Err(parse_error!(
             source = source.to_string(),
-            code = "arx::repository::parse",
+            code = "decaff::repository::parse",
             labels = vec![LabeledSpan::at(
               (0, host.len()),
               "must be one of: github/gh, gitlab/gl, or bitbucket/bb"
@@ -331,7 +331,7 @@ impl FromStr for RemoteRepository {
       } else {
         return Err(parse_error!(
           source = source.to_string(),
-          code = "arx::repository::parse",
+          code = "decaff::repository::parse",
           labels = vec![LabeledSpan::at(
             (offset, user.len()),
             "only ASCII alphanumeric characters, _ and - allowed"
@@ -350,7 +350,7 @@ impl FromStr for RemoteRepository {
       if matches!(input.find('#'), Some(hash_idx) if slash_idx < hash_idx) {
         return Err(parse_error!(
           source = source.to_string(),
-          code = "arx::repository::parse",
+          code = "decaff::repository::parse",
           labels = vec![LabeledSpan::at((offset + slash_idx, 1), "remove this")],
           "Multiple slashes in the input."
         ));
@@ -366,7 +366,7 @@ impl FromStr for RemoteRepository {
     if !repo.chars().all(is_valid_repo) {
       return Err(parse_error!(
         source = source.to_string(),
-        code = "arx::repository::parse",
+        code = "decaff::repository::parse",
         labels = vec![LabeledSpan::at(
           (offset, repo.len()),
           "only ASCII alphanumeric characters, _, - and . allowed"
@@ -564,7 +564,7 @@ mod tests {
       Err(
         parse_error!(
           source = "srht:foo/bar",
-          code = "arx::repository::parse",
+          code = "decaff::repository::parse",
           labels = vec![LabeledSpan::at(
             (0, 5),
             "must be one of: github/gh, gitlab/gl, or bitbucket/bb"

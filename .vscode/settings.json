@@ -7,5 +7,8 @@
   },
   "rust-analyzer.rustfmt.extraArgs": ["+nightly"],
   "rust-analyzer.diagnostics.disabled": ["macro-error"],
-  "rust-analyzer.lens.enable": true
+  "rust-analyzer.lens.enable": true,
+  "[markdown]": {
+    "editor.wordWrapColumn": 100
+  }
 }

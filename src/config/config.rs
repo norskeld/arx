@@ -13,7 +13,7 @@ use crate::config::prompts::*;
 use crate::config::value::*;
 use crate::config::KdlUtils;
 
-const CONFIG_NAME: &str = "arx.kdl";
+const CONFIG_NAME: &str = "decaff.kdl";
 
 /// Helper macro to create a [ConfigError::Diagnostic] in a slightly less verbose way.
 macro_rules! diagnostic {
@@ -29,7 +29,7 @@ macro_rules! diagnostic {
 #[derive(Debug, Diagnostic, Error)]
 pub enum ConfigError {
   #[error("{message}")]
-  #[diagnostic(code(arx::config::io))]
+  #[diagnostic(code(decaff::config::io))]
   Io {
     message: String,
     #[source]
@@ -125,7 +125,7 @@ pub enum ActionSingle {
   Unknown(Unknown),
 }
 
-/// Arx config.
+/// decaff config.
 #[derive(Debug)]
 pub struct Config {
   /// Config directory.
@@ -224,7 +224,7 @@ impl Config {
               defaults.delete = node.get_bool(0).ok_or_else(|| {
                 diagnostic!(
                   source = &self.source,
-                  code = "arx::config::options",
+                  code = "decaff::config::options",
                   labels = vec![LabeledSpan::at(
                     node.span().to_owned(),
                     "this node requires a boolean argument"
@@ -292,7 +292,7 @@ impl Config {
         // Otherwise we have invalid actions block.
         else {
           Err(ConfigError::Diagnostic(miette::miette!(
-            code = "arx::config::actions",
+            code = "decaff::config::actions",
             "You can use either suites of actions or a flat list of single actions. \
              Right now you have a mix of both."
           )))
@@ -433,7 +433,7 @@ impl Config {
     node.get_string(0).ok_or_else(|| {
       diagnostic!(
         source = &self.source,
-        code = "arx::config::actions",
+        code = "decaff::config::actions",
         labels = vec![
           LabeledSpan::at(start..end, "this node requires a string argument"),
           LabeledSpan::at_offset(end, "argument should be here")
@@ -447,7 +447,7 @@ impl Config {
     node.get_string(key).ok_or_else(|| {
       diagnostic!(
         source = &self.source,
-        code = "arx::config::actions",
+        code = "decaff::config::actions",
         labels = vec![LabeledSpan::at(
           node.span().to_owned(),
           format!("this node requires the `{key}` attribute")
@@ -474,7 +474,7 @@ impl Config {
     node.children().ok_or_else(|| {
       diagnostic!(
         source = &self.source,
-        code = "arx::config::actions",
+        code = "decaff::config::actions",
         labels = vec![LabeledSpan::at(
           node.span().to_owned(),
           format!("this node requires the following child nodes: {nodes}")
@@ -488,7 +488,7 @@ impl Config {
     let hint = nodes.get("hint").ok_or_else(|| {
       diagnostic!(
         source = &self.source,
-        code = "arx::config::actions",
+        code = "decaff::config::actions",
         labels = vec![LabeledSpan::at(
           parent.span().to_owned(),
           "prompts require a `hint` child node"
@@ -514,7 +514,7 @@ impl Config {
     let options = nodes.get("options").ok_or_else(|| {
       diagnostic!(
         source = &self.source,
-        code = "arx::config::actions",
+        code = "decaff::config::actions",
         labels = vec![LabeledSpan::at(
           parent.span().to_owned(),
           "select prompts require the `options` child node"
@@ -538,7 +538,7 @@ impl Config {
       } else {
         return Err(diagnostic!(
           source = &self.source,
-          code = "arx::config::actions",
+          code = "decaff::config::actions",
           labels = vec![LabeledSpan::at(
             span,
             "option values can be either strings or numbers"
@@ -550,7 +550,7 @@ impl Config {
       let option = value.ok_or_else(|| {
         diagnostic!(
           source = &self.source,
-          code = "arx::config::actions",
+          code = "decaff::config::actions",
           labels = vec![LabeledSpan::at(
             span,
             "failed to converted this value to a string"

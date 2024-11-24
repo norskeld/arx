@@ -22,7 +22,7 @@ const USE_PERMISSIONS: bool = true;
 #[derive(Debug, Diagnostic, Error)]
 pub enum UnpackError {
   #[error("{message}")]
-  #[diagnostic(code(arx::unpack::io))]
+  #[diagnostic(code(decaff::unpack::io))]
   Io {
     message: String,
     #[source]

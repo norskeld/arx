@@ -11,7 +11,7 @@ use crate::config::{ActionSingle, ActionSuite, Actions, Config, Value};
 #[derive(Debug, Diagnostic, Error)]
 pub enum ExecutorError {
   #[error("{message}")]
-  #[diagnostic(code(arx::actions::executor::io))]
+  #[diagnostic(code(decaff::actions::executor::io))]
   Io {
     message: String,
     #[source]
@@ -84,7 +84,7 @@ impl Executor {
     Ok(())
   }
 
-  /// Execute a suite of actions.
+  /// Execute suites of actions.
   async fn suite(&self, suites: &[ActionSuite]) -> miette::Result<()> {
     let mut state = State::new();
 
@@ -94,7 +94,6 @@ impl Executor {
 
       println!("[{hint}: {name}]\n");
 
-      // Man, I hate how peekable iterators work in Rust.
       let mut it = actions.iter().peekable();
 
       while let Some(action) = it.next() {

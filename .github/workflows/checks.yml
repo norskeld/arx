@@ -1,8 +1,5 @@
 name: checks
 
-# Note: All jobs (excepting `fmt`) by default use the same channel as defined in `rust-toolchain`.
-# Note: All jobs run only a `ubuntu-latest`, no matrix whatsoever.
-
 on:
   push:
     branches: [master]
@@ -12,62 +9,57 @@ on:
   workflow_dispatch:
 
 jobs:
-  check:
-    name: cargo check
+  extract-toolchain:
+    name: extract toolchain
     runs-on: ubuntu-latest
+    outputs:
+      toolchain: ${{ steps.toolchain.outputs.value }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: sebrollen/toml-action@v1.2.0
+        id: toolchain
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: check
+          file: rust-toolchain.toml
+          field: toolchain.channel
+      - run: echo "toolchain=${{ steps.toolchain.outputs.value || 'stable' }}" >> $GITHUB_OUTPUT
 
   clippy:
     name: cargo clippy
     runs-on: ubuntu-latest
+    needs: extract-toolchain
+    env:
+      TOOLCHAIN: ${{ needs.extract-toolchain.outputs.toolchain }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+          toolchain: ${{ env.TOOLCHAIN }}
+          components: clippy
+      - uses: swatinem/rust-cache@v2
+      - run: cargo clippy -- -D warnings
 
   test:
     name: cargo test
+    needs: extract-toolchain
     runs-on: ubuntu-latest
+    env:
+      TOOLCHAIN: ${{ needs.extract-toolchain.outputs.toolchain }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+          toolchain: ${{ env.TOOLCHAIN }}
+      - uses: swatinem/rust-cache@v2
+      - run: cargo test
 
   fmt:
     name: cargo fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: nightly
-          override: true
-      - run: rustup component add rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+          components: rustfmt
+      - uses: swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
